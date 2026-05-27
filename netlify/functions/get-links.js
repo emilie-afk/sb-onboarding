@@ -3,7 +3,7 @@
 // No auth required — the UI already gates access behind the team password.
 //
 // Query params: ?team=marketing&type=eos
-//   type: tasks | eos | kpi | handover | tools
+//   type: tasks | eos | kpi | handover | tools | goals
 //
 // Response for tasks/eos/handover/tools (flat array):
 //   { links: [{ id, name, url }, ...] }
@@ -37,8 +37,8 @@ exports.handler = async function (event) {
     const key   = `${team}_${type}`;
     const data  = await store.get(key, { type: 'json' });
 
-    // Default: kpi → {}, everything else → []
-    const fallback = type === 'kpi' ? {} : [];
+    // Default: kpi → {}, goals → { yearGoal:'', quarterGoal:'' }, others → []
+    const fallback = type === 'kpi' ? {} : type === 'goals' ? { yearGoal: '', quarterGoal: '' } : [];
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
