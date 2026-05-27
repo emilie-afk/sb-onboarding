@@ -143,6 +143,29 @@
     .drive-link:hover { text-decoration: underline; }
     .remove-btn { background: none; border: 1.5px solid var(--sand-dark); border-radius: 6px; width: 26px; height: 26px; font-size: 16px; line-height: 1; cursor: pointer; color: var(--red); display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.2s; }
     .remove-btn:hover { background: #fff0f0; border-color: var(--red); }
+    .edit-btn { background: none; border: 1.5px solid var(--sand-dark); border-radius: 6px; width: 26px; height: 26px; font-size: 14px; line-height: 1; cursor: pointer; color: var(--blue); display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.2s; margin-right: 4px; }
+    .edit-btn:hover { background: #f0f5ff; border-color: var(--blue); }
+    .edit-inline { display: flex; align-items: center; gap: 6px; flex: 1; flex-wrap: wrap; }
+    .edit-inline input { border: 1.5px solid var(--sand-dark); border-radius: 6px; padding: 4px 8px; font-size: 13px; font-family: inherit; }
+    .edit-inline input.edit-name { width: 140px; }
+    .edit-inline input.edit-url { flex: 1; min-width: 160px; }
+    .edit-save-btn { background: var(--green); color: #fff; border: none; border-radius: 6px; padding: 4px 12px; font-size: 13px; cursor: pointer; font-weight: 600; white-space: nowrap; }
+    .edit-save-btn:hover { opacity: 0.88; }
+    .edit-cancel-btn { background: none; border: 1.5px solid var(--sand-dark); border-radius: 6px; padding: 4px 10px; font-size: 13px; cursor: pointer; white-space: nowrap; }
+    .edit-cancel-btn:hover { background: var(--sand); }
+    .goals-card { margin: 0 0 20px; }
+    .goals-card .section-title { font-size: 15px; margin-bottom: 0; }
+    .goals-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+    .goals-row { display: flex; gap: 14px; flex-wrap: wrap; }
+    .goal-box { flex: 1; min-width: 130px; background: var(--sand); border-radius: 10px; padding: 16px 20px; border: 1.5px solid var(--sand-dark); text-align: center; }
+    .goal-label { font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px; }
+    .goal-value { font-size: 22px; font-weight: 700; color: var(--green-dark); }
+    .goal-value.empty { font-size: 16px; color: var(--text-muted); font-weight: 400; }
+    .goals-edit-row { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+    .goals-edit-row > div { flex: 1; min-width: 130px; display: flex; flex-direction: column; gap: 6px; }
+    .goals-edit-row label { font-size: 12px; font-weight: 700; color: var(--brown); text-transform: uppercase; letter-spacing: 0.4px; }
+    .goals-edit-row input { border: 1.5px solid var(--sand-dark); border-radius: 6px; padding: 8px 12px; font-size: 14px; font-family: inherit; background: #fff; }
+    .goals-edit-row input:focus { outline: none; border-color: var(--green); }
     .links-empty { text-align: center; padding: 20px; font-size: 13px; color: var(--text-muted); background: var(--sand); border-radius: 9px; border: 1.5px dashed var(--sand-dark); }
 
     /* Year sections (KPI) */
@@ -427,6 +450,42 @@
     <p>Your position task list, EOS files, and KPIs</p>
   </div>
   <div class="container" style="padding-top:0;">
+    <!-- Revenue Goals -->
+    <div class="card goals-card" id="goals-card">
+      <div class="goals-header">
+        <div class="section-title">🎯 Revenue Goals</div>
+        <button class="edit-btn" id="goals-edit-btn" title="Edit goals" onclick="editGoals()" style="display:none;">✏</button>
+      </div>
+      <div id="goals-display">
+        <div class="goals-row">
+          <div class="goal-box">
+            <div class="goal-label">This Year</div>
+            <div class="goal-value empty" id="goal-year-val">Not set</div>
+          </div>
+          <div class="goal-box">
+            <div class="goal-label">This Quarter</div>
+            <div class="goal-value empty" id="goal-quarter-val">Not set</div>
+          </div>
+        </div>
+      </div>
+      <div id="goals-edit-form" style="display:none;">
+        <div class="goals-edit-row">
+          <div>
+            <label>This Year Goal</label>
+            <input id="goal-year-input" type="text" placeholder="e.g. $1,200,000" />
+          </div>
+          <div>
+            <label>This Quarter Goal</label>
+            <input id="goal-quarter-input" type="text" placeholder="e.g. $300,000" />
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="edit-save-btn" onclick="saveGoals()">Save</button>
+          <button class="edit-cancel-btn" onclick="cancelGoals()">Cancel</button>
+        </div>
+      </div>
+    </div>
+
     <div class="tab-nav">
       <button class="active" onclick="showTab('tasks',this)">📋 Task List</button>
       <button onclick="showTab('eos',this)">📁 EOS Files</button>
@@ -455,7 +514,7 @@
     <div id="tab-eos" class="tab-content">
       <div class="card">
         <div class="section-title" style="font-size:16px;margin-bottom:8px;">📁 Weekly EOS Files</div>
-        <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.6;">Fill in your EOS file <strong>every Friday afternoon</strong>. Click a file to open it in Google Drive.</p>
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.6;">Fill in your EOS file <strong>every Monday morning</strong>. Click a file to open it in Google Drive.</p>
         <div id="eos-links-list"></div>
         <div id="eos-add-form" class="add-link-form" style="display:none;">
           <h4>+ Add EOS File</h4>
@@ -685,6 +744,9 @@
         adminArea.innerHTML = `<button class="admin-unlock-btn" onclick="showAdminModal()">🔒 Admin: manage files</button>`;
       }
     });
+    // Show/hide goals edit button for admins
+    const goalsEditBtn = document.getElementById('goals-edit-btn');
+    if (goalsEditBtn) goalsEditBtn.style.display = adminUnlocked ? 'flex' : 'none';
   }
 
   // ── Render team page ───────────────────────────────────────────
@@ -699,6 +761,7 @@
     showTab('tasks', document.querySelector('.tab-nav button'));
     renderAdminAreas();
     loadLinks('tasks');
+    loadGoals();
     window.scrollTo(0, 0);
   }
 
@@ -740,16 +803,19 @@
     }).join('');
   }
 
-  // Build a drive link card (with remove button if admin)
+  // Build a drive link card (with edit + remove buttons if admin)
   function driveCard(link, type, year) {
-    const removeAttr = year
-      ? `onclick="removeLink('${type}', ${link.id}, '${year}')"`
-      : `onclick="removeLink('${type}', ${link.id}, null)"`;
+    const yearArg = year ? `'${year}'` : 'null';
+    const removeAttr = `onclick="removeLink('${type}', ${link.id}, ${yearArg})"`;
+    const editAttr   = `onclick="editLinkCard('${type}', ${link.id}, ${yearArg}, this)"`;
     return `
-      <div class="drive-card">
+      <div class="drive-card" id="drive-card-${link.id}" data-name="${esc(link.name)}" data-url="${esc(link.url)}">
         <span class="drive-icon">📄</span>
         <a class="drive-link" href="${esc(link.url)}" target="_blank" rel="noopener noreferrer">${esc(link.name)}</a>
-        ${adminUnlocked ? `<button class="remove-btn" title="Remove" ${removeAttr}>×</button>` : ''}
+        ${adminUnlocked ? `
+          <button class="edit-btn" title="Edit" ${editAttr}>✏</button>
+          <button class="remove-btn" title="Remove" ${removeAttr}>×</button>
+        ` : ''}
       </div>`;
   }
 
@@ -801,6 +867,132 @@
     } catch { alert('Could not remove file. Please try again.'); }
   }
 
+  // ── Edit link inline ───────────────────────────────────────────
+  function editLinkCard(type, id, year, btn) {
+    const card = document.getElementById('drive-card-' + id);
+    if (!card) return;
+    const currentName = card.dataset.name || '';
+    const currentUrl  = card.dataset.url  || '';
+    const yearArg = year ? `'${year}'` : 'null';
+    card.innerHTML = `
+      <span class="drive-icon">📄</span>
+      <div class="edit-inline">
+        <input class="edit-name" placeholder="Display name" value="${esc(currentName)}" />
+        <input class="edit-url"  placeholder="URL" value="${esc(currentUrl)}" />
+        <button class="edit-save-btn"   onclick="saveEditLink('${type}', ${id}, ${yearArg}, this)">Save</button>
+        <button class="edit-cancel-btn" onclick="cancelEditLink('${type}', '${yearArg}')">Cancel</button>
+      </div>`;
+  }
+
+  async function saveEditLink(type, id, year, btn) {
+    const card    = btn.closest('.drive-card');
+    const newName = card.querySelector('.edit-name').value.trim();
+    const newUrl  = card.querySelector('.edit-url').value.trim();
+    if (!newUrl) { card.querySelector('.edit-url').focus(); return; }
+
+    const adminPassword = sessionStorage.getItem('adminPassword');
+    btn.textContent = '...'; btn.disabled = true;
+    try {
+      // Remove old entry
+      const r1 = await fetch('/.netlify/functions/manage-links', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'remove', team: currentTeam, type, year, id, adminPassword })
+      });
+      const d1 = await r1.json();
+      if (!d1.success) { alert('Error saving edit. Please try again.'); loadLinks(type); return; }
+
+      // Add updated entry
+      const r2 = await fetch('/.netlify/functions/manage-links', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'add', team: currentTeam, type, year, link: { name: newName || newUrl, url: newUrl }, adminPassword })
+      });
+      const d2 = await r2.json();
+      if (d2.success) {
+        if (type === 'kpi') renderKpiYears(d2.links);
+        else renderFlatList(type, d2.links);
+      } else { alert('Error saving edit.'); loadLinks(type); }
+    } catch (e) { alert('Could not save: ' + e.message); loadLinks(type); }
+  }
+
+  function cancelEditLink(type, year) {
+    loadLinks(type);
+  }
+
+  // ── Revenue Goals ─────────────────────────────────────────────
+  async function loadGoals() {
+    if (!currentTeam) return;
+    document.getElementById('goal-year-val').textContent    = '…';
+    document.getElementById('goal-quarter-val').textContent = '…';
+    try {
+      const res  = await fetch(`/.netlify/functions/get-links?team=${currentTeam}&type=goals`);
+      const data = await res.json();
+      renderGoals(data.links || {});
+    } catch {
+      renderGoals({});
+    }
+  }
+
+  function renderGoals(goals) {
+    const yearEl    = document.getElementById('goal-year-val');
+    const quarterEl = document.getElementById('goal-quarter-val');
+    if (goals.yearGoal) {
+      yearEl.textContent = goals.yearGoal;
+      yearEl.classList.remove('empty');
+    } else {
+      yearEl.textContent = 'Not set';
+      yearEl.classList.add('empty');
+    }
+    if (goals.quarterGoal) {
+      quarterEl.textContent = goals.quarterGoal;
+      quarterEl.classList.remove('empty');
+    } else {
+      quarterEl.textContent = 'Not set';
+      quarterEl.classList.add('empty');
+    }
+  }
+
+  function editGoals() {
+    const goals = {
+      yearGoal:    document.getElementById('goal-year-val').classList.contains('empty') ? '' : document.getElementById('goal-year-val').textContent,
+      quarterGoal: document.getElementById('goal-quarter-val').classList.contains('empty') ? '' : document.getElementById('goal-quarter-val').textContent,
+    };
+    document.getElementById('goal-year-input').value    = goals.yearGoal;
+    document.getElementById('goal-quarter-input').value = goals.quarterGoal;
+    document.getElementById('goals-display').style.display   = 'none';
+    document.getElementById('goals-edit-form').style.display = 'block';
+    document.getElementById('goals-edit-btn').style.display  = 'none';
+  }
+
+  function cancelGoals() {
+    document.getElementById('goals-display').style.display   = 'block';
+    document.getElementById('goals-edit-form').style.display = 'none';
+    document.getElementById('goals-edit-btn').style.display  = adminUnlocked ? 'flex' : 'none';
+  }
+
+  async function saveGoals() {
+    const yearGoal    = document.getElementById('goal-year-input').value.trim();
+    const quarterGoal = document.getElementById('goal-quarter-input').value.trim();
+    const adminPassword = sessionStorage.getItem('adminPassword');
+    const saveBtn = document.querySelector('#goals-edit-form .edit-save-btn');
+    saveBtn.textContent = '...'; saveBtn.disabled = true;
+    try {
+      const res  = await fetch('/.netlify/functions/manage-links', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set', team: currentTeam, type: 'goals', yearGoal, quarterGoal, adminPassword })
+      });
+      const data = await res.json();
+      if (data.success) {
+        renderGoals({ yearGoal, quarterGoal });
+        cancelGoals();
+      } else if (res.status === 401) {
+        alert('Incorrect admin password.');
+      } else {
+        alert('Error saving goals. Please try again.');
+      }
+    } catch (e) { alert('Could not save: ' + e.message); }
+    finally { saveBtn.textContent = 'Save'; saveBtn.disabled = false; }
+  }
+
   // ── Tabs ───────────────────────────────────────────────────────
   function showTab(id, btn) {
     document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
@@ -833,4 +1025,3 @@
 </script>
 </body>
 </html>
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
