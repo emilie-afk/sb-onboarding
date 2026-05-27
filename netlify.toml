@@ -1,9 +1,10 @@
 [build]
   functions = "netlify/functions"
-  command   = "npm install"
+  command   = "npm install && cd netlify/functions && npm install"
 
 [functions]
   node_bundler = "esbuild"
+  external_node_modules = ["@netlify/blobs"]
 
 [[headers]]
   for = "/*"
