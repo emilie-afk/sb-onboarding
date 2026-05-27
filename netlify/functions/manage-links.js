@@ -1,15 +1,16 @@
 // manage-links.js
-// Adds or removes file links. Requires the global admin password.
+// Adds or removes file links, and sets revenue goals. Requires admin password.
 //
 // POST body:
-//   { action, team, type, adminPassword, link?, id?, year? }
+//   { action, team, type, adminPassword, link?, id?, year?, yearGoal?, quarterGoal? }
 //
-//   action: 'add' | 'remove'
+//   action: 'add' | 'remove' | 'set'
 //   team:   'marketing' | 'customerservice' | 'seo' | 'design' | 'video'
-//   type:   'tasks' | 'eos' | 'kpi' | 'handover' | 'tools'
+//   type:   'tasks' | 'eos' | 'kpi' | 'handover' | 'tools' | 'goals'
 //   year:   required only for type='kpi' (e.g. "2026")
 //   link:   { name, url }   — for action='add'
 //   id:     number           — for action='remove'
+//   yearGoal, quarterGoal   — for type='goals', action='set'
 
 const { getStore } = require('@netlify/blobs');
 
@@ -22,7 +23,7 @@ exports.handler = async function (event) {
   try { body = JSON.parse(event.body); }
   catch { return { statusCode: 400, body: JSON.stringify({ success: false }) }; }
 
-  const { action, team, type, adminPassword, link, id, year } = body;
+  const { action, team, type, adminPassword, link, id, year, yearGoal, quarterGoal } = body;
 
   // ── Validate admin password ──
   const globalAdmin = process.env.PASSWORD_ADMIN;
@@ -59,7 +60,16 @@ exports.handler = async function (event) {
     const store = getStore({ name: 'team-links', siteID, token });
     const key   = `${team}_${type}`;
 
-    if (type === 'kpi') {
+    if (type === 'goals') {
+      // Goals can only be edited by the global admin
+      if (!globalAdmin || adminPassword !== globalAdmin) {
+        return { statusCode: 401, body: JSON.stringify({ success: false, error: 'Only the global admin can edit revenue goals.' }) };
+      }
+      const goals = { yearGoal: yearGoal || '', quarterGoal: quarterGoal || '' };
+      await store.setJSON(key, goals);
+      return { statusCode: 200, body: JSON.stringify({ success: true, goals }) };
+
+    } else if (type === 'kpi') {
       // KPI: year-keyed object  { "2026": [...], "2027": [...] }
       const allYears = (await store.get(key, { type: 'json' })) || {};
 
