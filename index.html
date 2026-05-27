@@ -300,7 +300,7 @@
       </div>
       <div style="background:var(--green-light);border-radius:9px;padding:14px;font-size:13px;color:var(--green-dark);line-height:1.9;">
         <strong>Example:</strong> Company at 100% + team at 120% = <strong>1.1× monthly salary bonus</strong> for that period.<br>
-        <strong>Extra:</strong> For every <strong>300,000 VND above the revenue goal</strong>, an extra 0.5 is added to the KPI multiplier, so going above and beyond is always rewarded.
+        <strong>Extra:</strong> For every <strong>300,000 USD above the revenue goal</strong>, an extra 0.5 is added to the KPI multiplier, so going above and beyond is always rewarded.
       </div>
     </div>
 
@@ -346,7 +346,7 @@
   <div class="hero" style="background:linear-gradient(135deg,#4a82b0 0%,#2a5f8a 100%);">
     <span class="emoji">✅</span>
     <h1>Daily Tasks</h1>
-    <p>These three things apply to <strong>everyone</strong>, every single working day.</p>
+    <p>Make sure you take care of these every working day.</p>
   </div>
   <div class="container">
     <div class="step-card">
@@ -370,11 +370,19 @@
       <div>
         <span class="step-tag green">🏷 Slack · #attendance-teamvn</span>
         <h3>Day Off or Working From Home</h3>
-        <p>If you have a <strong>day off</strong> or are <strong>working from home</strong>, do both of these:</p>
-        <ol style="margin-top:8px;padding-left:18px;font-size:13px;color:var(--text-muted);line-height:2.2;">
-          <li><strong>Send a private message</strong> to <strong>Ms. Tho</strong>, <strong>Ms. Ha</strong>, or <strong>Mr. Duc</strong> to let them know</li>
-          <li><strong>Post in #attendance-teamvn</strong> to log it for the team</li>
-        </ol>
+        <div style="margin-bottom:10px;">
+          <p style="font-size:13px;font-weight:700;color:var(--brown);margin-bottom:6px;">🏖 Day Off</p>
+          <ol style="padding-left:18px;font-size:13px;color:var(--text-muted);line-height:2.2;">
+            <li><strong>Send a private message</strong> to <strong>Ms. Tho</strong>, <strong>Ms. Ha</strong>, or <strong>Mr. Duc</strong> to let them know</li>
+            <li><strong>Post in #attendance-teamvn</strong> to log it for the team</li>
+          </ol>
+        </div>
+        <div>
+          <p style="font-size:13px;font-weight:700;color:var(--brown);margin-bottom:6px;">🏠 Working From Home</p>
+          <ol style="padding-left:18px;font-size:13px;color:var(--text-muted);line-height:2.2;">
+            <li><strong>Post in #attendance-teamvn</strong> to let the team know</li>
+          </ol>
+        </div>
         <div style="margin-top:12px;">
           <a href="https://docs.google.com/spreadsheets/d/1grpf4V5ygf_D6qta9I5BwpuFpXHcGElSghDhvdsRhP4/edit?gid=848272588#gid=848272588"
              target="_blank" rel="noopener noreferrer"
@@ -429,7 +437,18 @@
 
     <!-- Tasks -->
     <div id="tab-tasks" class="tab-content active">
-      <div id="team-tasks-content"></div>
+      <div class="card">
+        <div class="section-title" style="font-size:16px;margin-bottom:8px;">📋 Position Task List</div>
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.6;">Your position task list is in Google Drive. Click a link below to open it.</p>
+        <div id="tasks-links-list"></div>
+        <div id="tasks-add-form" class="add-link-form" style="display:none;">
+          <h4>+ Add Task List Link</h4>
+          <input type="text" id="tasks-new-name" placeholder="File name (e.g. Marketing Task List 2026)" />
+          <input type="url" id="tasks-new-url" placeholder="Paste Google Drive link here" />
+          <button class="btn-add" onclick="addLink('tasks')">Add Link</button>
+        </div>
+        <div id="tasks-admin-area"></div>
+      </div>
     </div>
 
     <!-- EOS -->
@@ -488,7 +507,18 @@
 
     <!-- Tools -->
     <div id="tab-tools" class="tab-content">
-      <div id="team-tools-content"></div>
+      <div class="card">
+        <div class="section-title" style="font-size:16px;margin-bottom:8px;">🛠 Tools</div>
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.6;">Links to the tools and dashboards used by your team.</p>
+        <div id="tools-links-list"></div>
+        <div id="tools-add-form" class="add-link-form" style="display:none;">
+          <h4>+ Add Tool Link</h4>
+          <input type="text" id="tools-new-name" placeholder="Tool name (e.g. Content Calendar)" />
+          <input type="url" id="tools-new-url" placeholder="Paste link here" />
+          <button class="btn-add" onclick="addLink('tools')">Add Link</button>
+        </div>
+        <div id="tools-admin-area"></div>
+      </div>
     </div>
   </div>
   <footer>🌵 Succulents Box · Employee Onboarding</footer>
@@ -643,7 +673,7 @@
   }
 
   function renderAdminAreas() {
-    ['eos', 'kpi', 'handover'].forEach(type => {
+    ['tasks', 'eos', 'kpi', 'handover', 'tools'].forEach(type => {
       const addForm   = document.getElementById(`${type}-add-form`);
       const adminArea = document.getElementById(`${type}-admin-area`);
       if (!addForm || !adminArea) return;
@@ -666,21 +696,9 @@
     document.getElementById('team-emoji').textContent = data.emoji;
     document.getElementById('team-name-heading').textContent = data.name + ' Team';
 
-    // Tasks
-    document.getElementById('team-tasks-content').innerHTML = `
-      <div class="card">
-        <div class="section-title" style="font-size:16px;margin-bottom:16px;">📋 Position Task List</div>
-        ${data.tasks.map(t => `<div class="task-item"><div class="task-bullet"></div><span>${t}</span></div>`).join('')}
-      </div>`;
-
-    // Tools
-    document.getElementById('team-tools-content').innerHTML = `
-      <div class="grid-3">
-        ${data.tools.map(t => `<div class="tool-card"><div class="tool-icon">${t.icon}</div><div class="tool-name">${t.name}</div><div class="tool-action">${t.note}</div></div>`).join('')}
-      </div>`;
-
     showTab('tasks', document.querySelector('.tab-nav button'));
     renderAdminAreas();
+    loadLinks('tasks');
     window.scrollTo(0, 0);
   }
 
@@ -703,7 +721,7 @@
   // EOS / Handover: flat list
   function renderFlatList(type, links) {
     const el    = document.getElementById(`${type}-links-list`);
-    const label = type === 'eos' ? 'EOS' : 'Handover';
+    const label = type === 'eos' ? 'EOS' : type === 'tasks' ? 'Task List' : type === 'tools' ? 'Tools' : 'Handover';
     if (!links.length) { el.innerHTML = `<div class="links-empty">No ${label} files added yet.</div>`; return; }
     el.innerHTML = links.map(l => driveCard(l, type, null)).join('');
   }
@@ -783,7 +801,7 @@
     document.querySelectorAll('.tab-nav button').forEach(b => b.classList.remove('active'));
     document.getElementById('tab-' + id).classList.add('active');
     if (btn) btn.classList.add('active');
-    if (id === 'eos' || id === 'kpi' || id === 'handover') loadLinks(id);
+    if (id === 'tasks' || id === 'eos' || id === 'kpi' || id === 'handover' || id === 'tools') loadLinks(id);
   }
 
   function closeTeam() {
