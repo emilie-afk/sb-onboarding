@@ -65,7 +65,14 @@ exports.handler = async function (event) {
       if (!globalAdmin || adminPassword !== globalAdmin) {
         return { statusCode: 401, body: JSON.stringify({ success: false, error: 'Only the global admin can edit revenue goals.' }) };
       }
-      const goals = { yearGoal: yearGoal || '', quarterGoal: quarterGoal || '' };
+      const { monthlyGoal, brandGoals, channelGoals } = body;
+      const goals = {
+        yearGoal:     yearGoal     || '',
+        quarterGoal:  quarterGoal  || '',
+        monthlyGoal:  monthlyGoal  || '',
+        brandGoals:   Array.isArray(brandGoals)   ? brandGoals   : [],
+        channelGoals: Array.isArray(channelGoals) ? channelGoals : []
+      };
       await store.setJSON(key, goals);
       return { statusCode: 200, body: JSON.stringify({ success: true, goals }) };
 
