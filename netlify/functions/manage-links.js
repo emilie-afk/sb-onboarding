@@ -65,16 +65,29 @@ exports.handler = async function (event) {
       if (!globalAdmin || adminPassword !== globalAdmin) {
         return { statusCode: 401, body: JSON.stringify({ success: false, error: 'Only the global admin can edit revenue goals.' }) };
       }
-      const { monthlyGoal, brandGoals, channelGoals } = body;
-      const goals = {
+      // Load existing year-keyed object { "2026": {...}, "2025": {...} }
+      const allGoals = (await store.get(key, { type: 'json' })) || {};
+
+      if (action === 'delete-year') {
+        const { goalYear } = body;
+        if (!goalYear) return { statusCode: 400, body: JSON.stringify({ success: false }) };
+        delete allGoals[goalYear];
+        await store.setJSON(key, allGoals);
+        return { statusCode: 200, body: JSON.stringify({ success: true, goals: allGoals }) };
+      }
+
+      // action === 'set': add or update a year's goals
+      const { goalYear, monthlyGoals, brandGoals, channelGoals } = body;
+      if (!goalYear) return { statusCode: 400, body: JSON.stringify({ success: false, error: 'goalYear is required.' }) };
+      allGoals[goalYear] = {
         yearGoal:     yearGoal     || '',
         quarterGoal:  quarterGoal  || '',
-        monthlyGoal:  monthlyGoal  || '',
+        monthlyGoals: Array.isArray(monthlyGoals) ? monthlyGoals : [],
         brandGoals:   Array.isArray(brandGoals)   ? brandGoals   : [],
         channelGoals: Array.isArray(channelGoals) ? channelGoals : []
       };
-      await store.setJSON(key, goals);
-      return { statusCode: 200, body: JSON.stringify({ success: true, goals }) };
+      await store.setJSON(key, allGoals);
+      return { statusCode: 200, body: JSON.stringify({ success: true, goals: allGoals }) };
 
     } else if (type === 'kpi') {
       // KPI: year-keyed object  { "2026": [...], "2027": [...] }
