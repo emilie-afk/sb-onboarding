@@ -777,8 +777,14 @@
         nameInput.value = ''; urlInput.value = '';
         if (type === 'kpi') renderKpiYears(data.links);
         else renderFlatList(type, data.links);
-      } else { alert('Error: check your admin password and try again.'); }
-    } catch { alert('Could not add file. Please try again.'); }
+      } else if (res.status === 401) {
+        alert('Incorrect admin password. Please lock and re-enter your admin password.');
+      } else if (res.status === 500) {
+        alert('Server error (500). Check Netlify function logs for manage-links.');
+      } else {
+        alert('Error ' + res.status + ': could not save link. Check Netlify logs.');
+      }
+    } catch (e) { alert('Could not connect: ' + e.message); }
   }
 
   // ── Remove link ────────────────────────────────────────────────
