@@ -1,0 +1,8 @@
+{
+  "name": "employee-onboarding",
+  "version": "1.0.0",
+  "description": "Succulents Box employee onboarding site",
+  "dependencies": {
+    "@netlify/blobs": "^8.1.0"
+  }
+}
