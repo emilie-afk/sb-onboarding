@@ -2,6 +2,9 @@
   functions = "netlify/functions"
   command   = "npm install"
 
+[functions]
+  node_bundler = "esbuild"
+
 [[headers]]
   for = "/*"
   [headers.values]
