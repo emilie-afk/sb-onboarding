@@ -481,6 +481,7 @@
         <div class="section-title">🎯 Revenue Goals</div>
         <button class="edit-btn" id="goals-edit-btn" title="Edit goals" onclick="editGoals()" style="display:none;">✏</button>
       </div>
+
       <div id="goals-locked" style="text-align:center;padding:18px 0;color:var(--text-muted);font-size:14px;">
         🔒 Unlock your team section to view revenue goals.
       </div>
@@ -980,10 +981,15 @@
 
   // ── Revenue Goals ─────────────────────────────────────────────
   async function loadGoals() {
-    const canView = unlockedTeams.length > 0 || adminUnlocked;
+    // Re-read from sessionStorage every call so state is always fresh
+    const freshUnlocked = JSON.parse(sessionStorage.getItem('unlockedTeams') || '[]');
+    const freshAdmin    = sessionStorage.getItem('adminUnlocked') === 'true';
+    const canView = freshUnlocked.length > 0 || freshAdmin;
+
     const lockedEl  = document.getElementById('goals-locked');
     const displayEl = document.getElementById('goals-display');
     const editBtn   = document.getElementById('goals-edit-btn');
+
     if (!canView) {
       if (lockedEl)  lockedEl.style.display  = 'block';
       if (displayEl) displayEl.style.display = 'none';
@@ -993,8 +999,9 @@
     if (lockedEl)  lockedEl.style.display  = 'none';
     if (displayEl) displayEl.style.display = 'block';
     if (editBtn)   editBtn.style.display   = 'flex';
-    document.getElementById('goal-year-val').textContent    = '…';
-    document.getElementById('goal-quarter-val').textContent = '…';
+
+    const container = document.getElementById('goals-years-container');
+    if (container) container.innerHTML = '<p style="font-size:13px;color:var(--text-muted);padding:8px 0;">Loading…</p>';
     try {
       const res  = await fetch('/.netlify/functions/get-links?team=global&type=goals');
       const data = await res.json();
@@ -1002,7 +1009,7 @@
       renderGoals(allGoalsData);
     } catch {
       allGoalsData = {};
-      renderGoals({});
+      if (container) container.innerHTML = '<p style="font-size:13px;color:var(--text-muted);padding:8px 0;">Could not load goals. Please refresh.</p>';
     }
   }
 
@@ -1012,12 +1019,22 @@
     // goalsData is { "2026": {...}, "2025": {...} } keyed by year label
     const years = Object.keys(goalsData).sort((a,b) => b.localeCompare(a));
     if (years.length === 0) { container.innerHTML = '<p style="font-size:13px;color:var(--text-muted);padding:8px 0;">No goals set yet.</p>'; return; }
-    container.innerHTML = years.map((yr, i) => {
+    // Filter out years with no meaningful data
+    const hasData = yr => {
       const g = goalsData[yr];
-      const adminBtns = (unlockedTeams.length > 0 || adminUnlocked)
-        ? `<button class="edit-year-btn" onclick="editGoals('${esc(yr)}')">Edit</button>
-           <button class="delete-year-btn" onclick="deleteGoalYear('${esc(yr)}')">Delete</button>`
-        : '';
+      if (!g || typeof g !== 'object') return false;
+      return g.yearGoal || g.quarterGoal ||
+        (Array.isArray(g.monthlyGoals)  && g.monthlyGoals.length  > 0) ||
+        (Array.isArray(g.brandGoals)    && g.brandGoals.length    > 0) ||
+        (Array.isArray(g.channelGoals)  && g.channelGoals.length  > 0);
+    };
+    const filteredYears = years.filter(hasData);
+    if (filteredYears.length === 0) { container.innerHTML = '<p style="font-size:13px;color:var(--text-muted);padding:8px 0;">No goals set yet.</p>'; return; }
+    container.innerHTML = filteredYears.map((yr, i) => {
+      const g = goalsData[yr];
+      const freshAdmin2 = sessionStorage.getItem('adminUnlocked') === 'true';
+      const adminBtns = `<button class="edit-year-btn" onclick="editGoals('${esc(yr)}')">Edit</button>
+           <button class="delete-year-btn" onclick="deleteGoalYear('${esc(yr)}')">Delete</button>`;
       // Top goals row
       const topRow = [
         g.yearGoal    ? `<div class="goal-box"><div class="goal-label">Year</div><div class="goal-value">${esc(g.yearGoal)}</div></div>` : '',
@@ -1216,6 +1233,7 @@
     sessionStorage.removeItem('adminUnlocked');
     sessionStorage.removeItem('adminPassword');
     showPage('teams', null);
+    loadGoals();
     document.querySelectorAll('nav a').forEach(a => { if (a.textContent.includes('My Team')) a.classList.add('active'); });
   }
 
