@@ -2,13 +2,14 @@
 // Returns saved file links for a team + type.
 // No auth required — the UI already gates access behind the team password.
 //
-// Query params: ?team=marketing&type=eos   (type: eos | kpi | handover)
+// Query params: ?team=marketing&type=eos
+//   type: tasks | eos | kpi | handover | tools
 //
-// Response for eos / handover (flat array):
+// Response for tasks/eos/handover/tools (flat array):
 //   { links: [{ id, name, url }, ...] }
 //
 // Response for kpi (year-keyed object):
-//   { links: { "2026": [{ id, name, url }, ...], "2027": [...] } }
+//   { links: { "2026": [{ id, name, url }, ...] } }
 
 const { getStore } = require('@netlify/blobs');
 
@@ -19,12 +20,24 @@ exports.handler = async function (event) {
     return { statusCode: 400, body: JSON.stringify({ error: 'Missing team or type' }) };
   }
 
+  // ── Get store with explicit credentials ──
+  const siteID = process.env.SITE_ID;
+  const token  = process.env.NETLIFY_API_TOKEN;
+
+  if (!siteID || !token) {
+    console.error('get-links: missing SITE_ID or NETLIFY_API_TOKEN env vars');
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: 'Server misconfiguration: missing SITE_ID or NETLIFY_API_TOKEN' })
+    };
+  }
+
   try {
-    const store = getStore('team-links');
+    const store = getStore({ name: 'team-links', siteID, token });
     const key   = `${team}_${type}`;
     const data  = await store.get(key, { type: 'json' });
 
-    // Default: eos/handover → [], kpi → {}
+    // Default: kpi → {}, everything else → []
     const fallback = type === 'kpi' ? {} : [];
     return {
       statusCode: 200,
@@ -32,10 +45,10 @@ exports.handler = async function (event) {
       body: JSON.stringify({ links: data ?? fallback }),
     };
   } catch (err) {
-    console.error('get-links error:', err);
+    console.error('get-links error:', err.message || err);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: 'Failed to load links' }),
+      body: JSON.stringify({ error: 'Failed to load links', detail: err.message }),
     };
   }
 };
