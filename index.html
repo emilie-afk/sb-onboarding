@@ -188,6 +188,24 @@
     .brand-edit-row .remove-brand-btn:hover { background: #fff0f0; border-color: var(--red); }
     .add-brand-btn { background: none; border: 1.5px dashed var(--sand-dark); border-radius: 6px; padding: 6px 14px; font-size: 13px; cursor: pointer; color: var(--text-muted); font-weight: 600; margin-top: 4px; }
     .add-brand-btn:hover { border-color: var(--green); color: var(--green-dark); }
+    .monthly-goals-display { margin-top: 16px; border-top: 1px solid var(--sand-dark); padding-top: 14px; }
+    .monthly-goals-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-muted); margin-bottom: 10px; }
+    .monthly-goals-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+    .month-goal-chip { background: var(--sand); border: 1.5px solid var(--sand-dark); border-radius: 8px; padding: 8px 12px; text-align: center; }
+    .month-goal-chip .month-name { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-muted); margin-bottom: 4px; }
+    .month-goal-chip .month-val  { font-size: 15px; font-weight: 700; color: var(--green-dark); }
+    .month-edit-row input.month-name-inp { width: 130px; }
+    .month-edit-row input.month-goal-inp { width: 120px; }
+    .goals-year-section { margin-bottom: 20px; border: 1.5px solid var(--sand-dark); border-radius: 10px; overflow: hidden; }
+    .goals-year-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; background: var(--sand); cursor: pointer; }
+    .goals-year-header .year-label { font-weight: 700; color: var(--brown); font-size: 15px; }
+    .goals-year-header .year-actions { display: flex; gap: 6px; align-items: center; }
+    .goals-year-body { padding: 14px 16px; }
+    .delete-year-btn { background: none; border: 1.5px solid var(--sand-dark); border-radius: 6px; padding: 3px 10px; font-size: 12px; cursor: pointer; color: var(--red); font-weight: 600; }
+    .delete-year-btn:hover { background: #fff0f0; border-color: var(--red); }
+    .edit-year-btn { background: none; border: 1.5px solid var(--sand-dark); border-radius: 6px; padding: 3px 10px; font-size: 12px; cursor: pointer; color: var(--blue); font-weight: 600; }
+    .edit-year-btn:hover { background: #f0f5ff; border-color: var(--blue); }
+    .goals-year-section .goals-row { margin-bottom: 0; }
     .links-empty { text-align: center; padding: 20px; font-size: 13px; color: var(--text-muted); background: var(--sand); border-radius: 9px; border: 1.5px dashed var(--sand-dark); }
 
     /* Year sections (KPI) */
@@ -454,7 +472,7 @@
   <div class="hero" style="background:linear-gradient(135deg,var(--brown-light) 0%,var(--brown) 100%);">
     <span class="emoji">👥</span>
     <h1>Team Sections</h1>
-    <p>Select your team below. Each section is password-protected. Ask your manager for the password.</p>
+    <p>Select your team below. Each section is password-protected. The password is shared on LastPass — do not ask anyone for it.</p>
   </div>
   <div class="container">
     <!-- Revenue Goals -->
@@ -467,43 +485,28 @@
         🔒 Unlock your team section to view revenue goals.
       </div>
       <div id="goals-display" style="display:none;">
-        <div class="goals-row">
-          <div class="goal-box">
-            <div class="goal-label">This Year</div>
-            <div class="goal-value empty" id="goal-year-val">Not set</div>
-          </div>
-          <div class="goal-box">
-            <div class="goal-label">This Quarter</div>
-            <div class="goal-value empty" id="goal-quarter-val">Not set</div>
-          </div>
-          <div class="goal-box" id="goal-month-box" style="display:none;">
-            <div class="goal-label">This Month</div>
-            <div class="goal-value" id="goal-month-val"></div>
-          </div>
-        </div>
-        <div id="brand-goals-display" style="display:none;">
-          <div class="brand-goals-title">By Brand</div>
-          <div id="brand-goals-list"></div>
-        </div>
-        <div id="channel-goals-display" style="display:none;">
-          <div class="brand-goals-title" style="margin-top:14px;">By Channel</div>
-          <div id="channel-goals-list"></div>
-        </div>
+        <div id="goals-years-container"></div>
       </div>
       <div id="goals-edit-form" style="display:none;">
+        <div style="margin-bottom:14px;">
+          <label style="font-size:12px;font-weight:700;color:var(--brown);text-transform:uppercase;letter-spacing:0.4px;">Year Name</label>
+          <input id="goal-year-label" type="text" placeholder="e.g. 2026 or FY2026" style="margin-top:6px;width:180px;border:1.5px solid var(--sand-dark);border-radius:6px;padding:8px 12px;font-size:14px;font-family:inherit;display:block;" />
+        </div>
         <div class="goals-edit-row">
           <div>
-            <label>This Year Goal <span style="font-weight:400;color:var(--text-muted);">(optional)</span></label>
+            <label>Revenue Goal — Year <span style="font-weight:400;color:var(--text-muted);">(optional)</span></label>
             <input id="goal-year-input" type="text" placeholder="e.g. $1,200,000" />
           </div>
           <div>
-            <label>This Quarter Goal <span style="font-weight:400;color:var(--text-muted);">(optional)</span></label>
+            <label>Revenue Goal — Quarter <span style="font-weight:400;color:var(--text-muted);">(optional)</span></label>
             <input id="goal-quarter-input" type="text" placeholder="e.g. $300,000" />
           </div>
-          <div>
-            <label>This Month Goal <span style="font-weight:400;color:var(--text-muted);">(optional)</span></label>
-            <input id="goal-month-input" type="text" placeholder="e.g. $100,000" />
-          </div>
+
+        </div>
+        <div class="brand-edit-section">
+          <div class="brand-edit-title">Monthly Breakdown <span style="font-weight:400;color:var(--text-muted);text-transform:none;letter-spacing:0;">(optional)</span></div>
+          <div id="month-edit-rows"></div>
+          <button class="add-brand-btn" onclick="addMonthRow()">+ Add month</button>
         </div>
         <div class="brand-edit-section">
           <div class="brand-edit-title">By Brand <span style="font-weight:400;color:var(--text-muted);text-transform:none;letter-spacing:0;">(optional)</span></div>
@@ -995,121 +998,132 @@
     try {
       const res  = await fetch('/.netlify/functions/get-links?team=global&type=goals');
       const data = await res.json();
-      renderGoals(data.links || {});
+      allGoalsData = data.links || {};
+      renderGoals(allGoalsData);
     } catch {
+      allGoalsData = {};
       renderGoals({});
     }
   }
 
-  function renderGoals(goals) {
-    // Year
-    const yearEl = document.getElementById('goal-year-val');
-    if (goals.yearGoal) { yearEl.textContent = goals.yearGoal; yearEl.classList.remove('empty'); }
-    else { yearEl.textContent = 'Not set'; yearEl.classList.add('empty'); }
-    // Quarter
-    const quarterEl = document.getElementById('goal-quarter-val');
-    if (goals.quarterGoal) { quarterEl.textContent = goals.quarterGoal; quarterEl.classList.remove('empty'); }
-    else { quarterEl.textContent = 'Not set'; quarterEl.classList.add('empty'); }
-    // Month
-    const monthBox = document.getElementById('goal-month-box');
-    const monthEl  = document.getElementById('goal-month-val');
-    if (goals.monthlyGoal) {
-      monthEl.textContent = goals.monthlyGoal;
-      monthBox.style.display = 'block';
-    } else {
-      monthBox.style.display = 'none';
-    }
-    // Brand goals
-    const brandSection = document.getElementById('brand-goals-display');
-    const brandList    = document.getElementById('brand-goals-list');
-    const brands = goals.brandGoals || [];
-    if (brands.length > 0) {
-      brandList.innerHTML = brands.map(b => {
-        const periods = [
-          b.yearGoal    ? `<div class="brand-period-box">Year<span>${esc(b.yearGoal)}</span></div>`    : '',
-          b.quarterGoal ? `<div class="brand-period-box">Quarter<span>${esc(b.quarterGoal)}</span></div>` : '',
-          b.monthlyGoal ? `<div class="brand-period-box">Month<span>${esc(b.monthlyGoal)}</span></div>`  : '',
-        ].filter(Boolean).join('');
-        return `<div class="brand-goal-display">
-          <div class="brand-goal-name">${esc(b.brand)}</div>
-          <div class="brand-goal-periods">${periods || '<span style="font-size:13px;color:var(--text-muted);">No goals set</span>'}</div>
-        </div>`;
-      }).join('');
-      brandSection.style.display = 'block';
-    } else {
-      brandSection.style.display = 'none';
-    }
-    // Channel goals
-    const channelSection = document.getElementById('channel-goals-display');
-    const channelList    = document.getElementById('channel-goals-list');
-    const channels = goals.channelGoals || [];
-    if (channels.length > 0) {
-      channelList.innerHTML = channels.map(c => {
-        const periods = [
-          c.yearGoal    ? `<div class="brand-period-box">Year<span>${esc(c.yearGoal)}</span></div>`    : '',
-          c.quarterGoal ? `<div class="brand-period-box">Quarter<span>${esc(c.quarterGoal)}</span></div>` : '',
-          c.monthlyGoal ? `<div class="brand-period-box">Month<span>${esc(c.monthlyGoal)}</span></div>`  : '',
-        ].filter(Boolean).join('');
-        return `<div class="brand-goal-display">
-          <div class="brand-goal-name">${esc(c.channel)}</div>
-          <div class="brand-goal-periods">${periods || '<span style="font-size:13px;color:var(--text-muted);">No goals set</span>'}</div>
-        </div>`;
-      }).join('');
-      channelSection.style.display = 'block';
-    } else {
-      channelSection.style.display = 'none';
-    }
+  function renderGoals(goalsData) {
+    const container = document.getElementById('goals-years-container');
+    if (!container) return;
+    // goalsData is { "2026": {...}, "2025": {...} } keyed by year label
+    const years = Object.keys(goalsData).sort((a,b) => b.localeCompare(a));
+    if (years.length === 0) { container.innerHTML = '<p style="font-size:13px;color:var(--text-muted);padding:8px 0;">No goals set yet.</p>'; return; }
+    container.innerHTML = years.map((yr, i) => {
+      const g = goalsData[yr];
+      const adminBtns = (unlockedTeams.length > 0 || adminUnlocked)
+        ? `<button class="edit-year-btn" onclick="editGoals('${esc(yr)}')">Edit</button>
+           <button class="delete-year-btn" onclick="deleteGoalYear('${esc(yr)}')">Delete</button>`
+        : '';
+      // Top goals row
+      const topRow = [
+        g.yearGoal    ? `<div class="goal-box"><div class="goal-label">Year</div><div class="goal-value">${esc(g.yearGoal)}</div></div>` : '',
+        g.quarterGoal ? `<div class="goal-box"><div class="goal-label">Quarter</div><div class="goal-value">${esc(g.quarterGoal)}</div></div>` : '',
+      ].filter(Boolean).join('');
+      // Monthly
+      const months = (g.monthlyGoals||[]);
+      const monthHtml = months.length ? `
+        <div class="monthly-goals-display" style="margin-top:12px;">
+          <div class="monthly-goals-title">Monthly Breakdown</div>
+          <div class="monthly-goals-grid">${months.map(m=>`<div class="month-goal-chip"><div class="month-name">${esc(m.month)}</div><div class="month-val">${esc(m.goal)}</div></div>`).join('')}</div>
+        </div>` : '';
+      // Brands
+      const brands = (g.brandGoals||[]);
+      const brandHtml = brands.length ? `
+        <div class="brand-goals-display" style="margin-top:12px;">
+          <div class="brand-goals-title">By Brand</div>
+          ${brands.map(b=>{
+            const bp=[b.yearGoal?`<div class="brand-period-box">Year<span>${esc(b.yearGoal)}</span></div>`:'',b.quarterGoal?`<div class="brand-period-box">Quarter<span>${esc(b.quarterGoal)}</span></div>`:'',b.monthlyGoal?`<div class="brand-period-box">Month<span>${esc(b.monthlyGoal)}</span></div>`:''].filter(Boolean).join('');
+            return `<div class="brand-goal-display"><div class="brand-goal-name">${esc(b.brand)}</div><div class="brand-goal-periods">${bp}</div></div>`;
+          }).join('')}
+        </div>` : '';
+      // Channels
+      const channels = (g.channelGoals||[]);
+      const channelHtml = channels.length ? `
+        <div class="brand-goals-display" style="margin-top:12px;">
+          <div class="brand-goals-title">By Channel</div>
+          ${channels.map(c=>{
+            const cp=[c.yearGoal?`<div class="brand-period-box">Year<span>${esc(c.yearGoal)}</span></div>`:'',c.quarterGoal?`<div class="brand-period-box">Quarter<span>${esc(c.quarterGoal)}</span></div>`:'',c.monthlyGoal?`<div class="brand-period-box">Month<span>${esc(c.monthlyGoal)}</span></div>`:''].filter(Boolean).join('');
+            return `<div class="brand-goal-display"><div class="brand-goal-name">${esc(c.channel)}</div><div class="brand-goal-periods">${cp}</div></div>`;
+          }).join('')}
+        </div>` : '';
+      return `<div class="goals-year-section">
+        <div class="goals-year-header">
+          <span class="year-label">📅 ${esc(yr)}</span>
+          <span class="year-actions">${adminBtns}</span>
+        </div>
+        <div class="goals-year-body">
+          ${topRow ? `<div class="goals-row">${topRow}</div>` : ''}
+          ${monthHtml}${brandHtml}${channelHtml}
+          ${!topRow && !monthHtml && !brandHtml && !channelHtml ? '<p style="font-size:13px;color:var(--text-muted);">No details set.</p>' : ''}
+        </div>
+      </div>`;
+    }).join('');
   }
 
-  function editGoals() {
+
+  // currentEditYear tracks which year we're editing (null = new)
+  let currentEditYear = null;
+  let allGoalsData = {};
+
+  function editGoals(yr) {
     const pw = prompt('Enter the global admin password to edit revenue goals:');
     if (!pw) return;
     sessionStorage.setItem('goalsAdminPw', pw);
-    const yearEl    = document.getElementById('goal-year-val');
-    const quarterEl = document.getElementById('goal-quarter-val');
-    const monthEl   = document.getElementById('goal-month-val');
-    document.getElementById('goal-year-input').value    = yearEl.classList.contains('empty') ? '' : yearEl.textContent;
-    document.getElementById('goal-quarter-input').value = quarterEl.classList.contains('empty') ? '' : quarterEl.textContent;
-    document.getElementById('goal-month-input').value   = document.getElementById('goal-month-box').style.display === 'none' ? '' : monthEl.textContent;
-    // Populate brand rows from current display
-    const brandRows = document.getElementById('brand-goals-list');
-    const existingBrands = [];
-    brandRows.querySelectorAll('.brand-goal-display').forEach(row => {
-      const periods = row.querySelectorAll('.brand-period-box');
-      const get = label => { for(const p of periods) if(p.textContent.startsWith(label)) return p.querySelector('span').textContent; return ''; };
-      existingBrands.push({
-        brand:        row.querySelector('.brand-goal-name').textContent,
-        yearGoal:     get('Year'),
-        quarterGoal:  get('Quarter'),
-        monthlyGoal:  get('Month')
-      });
-    });
+    currentEditYear = yr || null;
+    const g = yr && allGoalsData[yr] ? allGoalsData[yr] : {};
+    document.getElementById('goal-year-label').value   = yr || '';
+    document.getElementById('goal-year-input').value   = g.yearGoal    || '';
+    document.getElementById('goal-quarter-input').value= g.quarterGoal || '';
+    // Month rows
+    document.getElementById('month-edit-rows').innerHTML = '';
+    (g.monthlyGoals||[]).forEach(m => addMonthRow(m.month, m.goal));
+    // Brand rows
     document.getElementById('brand-edit-rows').innerHTML = '';
-    existingBrands.forEach(b => addBrandRow(b.brand, b.yearGoal, b.quarterGoal, b.monthlyGoal));
-    // Populate channel rows
-    const channelRowsEl = document.getElementById('channel-goals-list');
-    const existingChannels = [];
-    channelRowsEl.querySelectorAll('.brand-goal-display').forEach(row => {
-      const periods = row.querySelectorAll('.brand-period-box');
-      const get = label => { for(const p of periods) if(p.textContent.startsWith(label)) return p.querySelector('span').textContent; return ''; };
-      existingChannels.push({ channel: row.querySelector('.brand-goal-name').textContent, yearGoal: get('Year'), quarterGoal: get('Quarter'), monthlyGoal: get('Month') });
-    });
+    (g.brandGoals||[]).forEach(b => addBrandRow(b.brand, b.yearGoal, b.quarterGoal, b.monthlyGoal));
+    // Channel rows
     document.getElementById('channel-edit-rows').innerHTML = '';
-    existingChannels.forEach(c => addChannelRow(c.channel, c.yearGoal, c.quarterGoal, c.monthlyGoal));
+    (g.channelGoals||[]).forEach(c => addChannelRow(c.channel, c.yearGoal, c.quarterGoal, c.monthlyGoal));
     document.getElementById('goals-display').style.display   = 'none';
     document.getElementById('goals-edit-form').style.display = 'block';
     document.getElementById('goals-edit-btn').style.display  = 'none';
   }
 
-  function addBrandRow(brand='', yearGoal='', quarterGoal='', monthlyGoal='') {
-    const container = document.getElementById('brand-edit-rows');
+
+
+  async function deleteGoalYear(yr) {
+    const pw = prompt('Enter the global admin password to delete goals for ' + yr + ':');
+    if (!pw) return;
+    if (!confirm('Delete all goals for ' + yr + '? This cannot be undone.')) return;
+    const saveBtn = null;
+    try {
+      const res = await fetch('/.netlify/functions/manage-links', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete-year', team: 'global', type: 'goals', goalYear: yr, adminPassword: pw })
+      });
+      const data = await res.json();
+      if (data.success) {
+        allGoalsData = data.goals;
+        renderGoals(allGoalsData);
+      } else if (res.status === 401) {
+        alert('Incorrect admin password.');
+      } else {
+        alert('Error deleting goals. Please try again.');
+      }
+    } catch(e) { alert('Could not delete: ' + e.message); }
+  }
+
+
+  function addMonthRow(month='', goal='') {
+    const container = document.getElementById('month-edit-rows');
     const row = document.createElement('div');
-    row.className = 'brand-edit-row';
+    row.className = 'brand-edit-row month-edit-row';
     row.innerHTML = `
-      <input class="brand-name-inp" type="text" placeholder="Brand name" value="${esc(brand)}" />
-      <input class="brand-goal-inp brand-year"    type="text" placeholder="Year goal"    value="${esc(yearGoal)}" />
-      <input class="brand-goal-inp brand-quarter" type="text" placeholder="Quarter goal" value="${esc(quarterGoal)}" />
-      <input class="brand-goal-inp brand-month"   type="text" placeholder="Month goal"   value="${esc(monthlyGoal)}" />
+      <input class="brand-name-inp month-name-inp" type="text" placeholder="e.g. January 2026" value="${esc(month)}" />
+      <input class="brand-goal-inp month-goal-inp" type="text" placeholder="e.g. $100,000" value="${esc(goal)}" />
       <button class="remove-brand-btn" onclick="this.closest('.brand-edit-row').remove()" title="Remove">×</button>`;
     container.appendChild(row);
   }
@@ -1135,9 +1149,15 @@
   }
 
   async function saveGoals() {
+    const goalYear    = document.getElementById('goal-year-label').value.trim();
     const yearGoal    = document.getElementById('goal-year-input').value.trim();
     const quarterGoal = document.getElementById('goal-quarter-input').value.trim();
-    const monthlyGoal = document.getElementById('goal-month-input').value.trim();
+    const monthlyGoals = Array.from(document.querySelectorAll('#month-edit-rows .month-edit-row'))
+      .map(row => ({
+        month: row.querySelector('.month-name-inp').value.trim(),
+        goal:  row.querySelector('.month-goal-inp').value.trim()
+      }))
+      .filter(m => m.month || m.goal);
     const brandGoals  = Array.from(document.querySelectorAll('#brand-edit-rows .brand-edit-row'))
       .map(row => ({
         brand:        row.querySelector('.brand-name-inp').value.trim(),
@@ -1160,11 +1180,13 @@
     try {
       const res  = await fetch('/.netlify/functions/manage-links', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'set', team: 'global', type: 'goals', yearGoal, quarterGoal, monthlyGoal, brandGoals, channelGoals, adminPassword })
+        body: JSON.stringify({ action: 'set', team: 'global', type: 'goals',
+          goalYear, yearGoal, quarterGoal, monthlyGoals, brandGoals, channelGoals, adminPassword })
       });
       const data = await res.json();
       if (data.success) {
-        renderGoals({ yearGoal, quarterGoal });
+        allGoalsData = data.goals;
+        renderGoals(allGoalsData);
         sessionStorage.removeItem('goalsAdminPw');
         cancelGoals();
       } else if (res.status === 401) {
