@@ -456,7 +456,10 @@
         <div class="section-title">🎯 Revenue Goals</div>
         <button class="edit-btn" id="goals-edit-btn" title="Edit goals" onclick="editGoals()" style="display:none;">✏</button>
       </div>
-      <div id="goals-display">
+      <div id="goals-locked" style="text-align:center;padding:18px 0;color:var(--text-muted);font-size:14px;">
+        🔒 Unlock your team section to view revenue goals.
+      </div>
+      <div id="goals-display" style="display:none;">
         <div class="goals-row">
           <div class="goal-box">
             <div class="goal-label">This Year</div>
@@ -625,6 +628,8 @@
   let currentTeam   = null;
   let adminUnlocked = sessionStorage.getItem('adminUnlocked') === 'true';
   let unlockedTeams = JSON.parse(sessionStorage.getItem('unlockedTeams') || '[]');
+  // Load goals on initial page load (in case session already has unlocked teams)
+  window.addEventListener('DOMContentLoaded', () => loadGoals());
 
   // ── Navigation ─────────────────────────────────────────────────
   function showPage(id, linkEl) {
@@ -634,6 +639,7 @@
     const pg = document.getElementById('page-' + id);
     if (pg) pg.classList.add('active');
     if (linkEl) linkEl.classList.add('active');
+    if (id === 'teams') loadGoals();
   }
 
   // ── Team unlock ────────────────────────────────────────────────
@@ -669,6 +675,7 @@
         unlockedTeams.push(currentTeam);
         sessionStorage.setItem('unlockedTeams', JSON.stringify(unlockedTeams));
         document.getElementById('pw-overlay').classList.remove('show');
+        loadGoals();
         renderTeamPage(currentTeam);
       } else {
         document.getElementById('pw-error').style.display = 'block';
@@ -744,9 +751,7 @@
         adminArea.innerHTML = `<button class="admin-unlock-btn" onclick="showAdminModal()">🔒 Admin: manage files</button>`;
       }
     });
-    // Show/hide goals edit button for admins
-    const goalsEditBtn = document.getElementById('goals-edit-btn');
-    if (goalsEditBtn) goalsEditBtn.style.display = adminUnlocked ? 'flex' : 'none';
+
   }
 
   // ── Render team page ───────────────────────────────────────────
@@ -761,7 +766,6 @@
     showTab('tasks', document.querySelector('.tab-nav button'));
     renderAdminAreas();
     loadLinks('tasks');
-    loadGoals();
     window.scrollTo(0, 0);
   }
 
@@ -920,11 +924,23 @@
 
   // ── Revenue Goals ─────────────────────────────────────────────
   async function loadGoals() {
-    if (!currentTeam) return;
+    const canView = unlockedTeams.length > 0 || adminUnlocked;
+    const lockedEl  = document.getElementById('goals-locked');
+    const displayEl = document.getElementById('goals-display');
+    const editBtn   = document.getElementById('goals-edit-btn');
+    if (!canView) {
+      if (lockedEl)  lockedEl.style.display  = 'block';
+      if (displayEl) displayEl.style.display = 'none';
+      if (editBtn)   editBtn.style.display   = 'none';
+      return;
+    }
+    if (lockedEl)  lockedEl.style.display  = 'none';
+    if (displayEl) displayEl.style.display = 'block';
+    if (editBtn)   editBtn.style.display   = 'flex';
     document.getElementById('goal-year-val').textContent    = '…';
     document.getElementById('goal-quarter-val').textContent = '…';
     try {
-      const res  = await fetch(`/.netlify/functions/get-links?team=${currentTeam}&type=goals`);
+      const res  = await fetch('/.netlify/functions/get-links?team=global&type=goals');
       const data = await res.json();
       renderGoals(data.links || {});
     } catch {
@@ -952,6 +968,10 @@
   }
 
   function editGoals() {
+    const pw = prompt('Enter the global admin password to edit revenue goals:');
+    if (!pw) return;
+    // Store temporarily for saveGoals to use
+    sessionStorage.setItem('goalsAdminPw', pw);
     const goals = {
       yearGoal:    document.getElementById('goal-year-val').classList.contains('empty') ? '' : document.getElementById('goal-year-val').textContent,
       quarterGoal: document.getElementById('goal-quarter-val').classList.contains('empty') ? '' : document.getElementById('goal-quarter-val').textContent,
@@ -964,15 +984,16 @@
   }
 
   function cancelGoals() {
+    sessionStorage.removeItem('goalsAdminPw');
     document.getElementById('goals-display').style.display   = 'block';
     document.getElementById('goals-edit-form').style.display = 'none';
-    document.getElementById('goals-edit-btn').style.display  = adminUnlocked ? 'flex' : 'none';
+    document.getElementById('goals-edit-btn').style.display  = 'flex';
   }
 
   async function saveGoals() {
     const yearGoal    = document.getElementById('goal-year-input').value.trim();
     const quarterGoal = document.getElementById('goal-quarter-input').value.trim();
-    const adminPassword = sessionStorage.getItem('adminPassword');
+    const adminPassword = sessionStorage.getItem('goalsAdminPw') || sessionStorage.getItem('adminPassword');
     const saveBtn = document.querySelector('#goals-edit-form .edit-save-btn');
     saveBtn.textContent = '...'; saveBtn.disabled = true;
     try {
@@ -983,6 +1004,7 @@
       const data = await res.json();
       if (data.success) {
         renderGoals({ yearGoal, quarterGoal });
+        sessionStorage.removeItem('goalsAdminPw');
         cancelGoals();
       } else if (res.status === 401) {
         alert('Incorrect admin password.');
