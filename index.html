@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Welcome to Employee Onboarding</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --green:       #6a9a58;
+      --green-light: #e8f2e2;
+      --green-dark:  #4a7a38;
+      --sand:        #f7f2eb;
+      --sand-dark:   #ede4d6;
+      --brown:       #6b4f35;
+      --brown-light: #a07850;
+      --text:        #2d2d2d;
+      --text-muted:  #7a6a58;
+      --white:       #ffffff;
+      --blue:        #4a82b0;
+      --blue-light:  #e8f0f8;
+      --red:         #c0392b;
+      --radius:      12px;
+      --shadow:      0 2px 12px rgba(0,0,0,0.08);
+    }
+    body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--sand); color: var(--text); min-height: 100vh; }
+
+    /* Nav */
+    nav { background: var(--white); border-bottom: 2px solid var(--sand-dark); padding: 0 32px; display: flex; align-items: center; gap: 4px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    .nav-logo { font-size: 22px; margin-right: 16px; padding: 14px 0; }
+    nav a { text-decoration: none; color: var(--text-muted); font-size: 14px; font-weight: 600; padding: 18px 14px; border-bottom: 3px solid transparent; transition: all 0.2s; white-space: nowrap; }
+    nav a:hover { color: var(--green-dark); }
+    nav a.active { color: var(--green-dark); border-bottom-color: var(--green); }
+
+    /* Pages */
+    .page { display: none; }
+    .page.active { display: block; }
+
+    /* Hero */
+    .hero { background: linear-gradient(135deg, var(--green) 0%, var(--green-dark) 100%); color: white; padding: 60px 32px 50px; text-align: center; }
+    .hero .emoji { font-size: 52px; display: block; margin-bottom: 16px; }
+    .hero h1 { font-size: 32px; font-weight: 700; margin-bottom: 10px; }
+    .hero p { font-size: 16px; opacity: 0.9; max-width: 480px; margin: 0 auto; line-height: 1.6; }
+
+    /* Containers */
+    .container { max-width: 860px; margin: 0 auto; padding: 40px 24px; }
+    .section-title { font-size: 22px; font-weight: 700; color: var(--brown); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
+
+    /* Cards */
+    .card { background: var(--white); border-radius: var(--radius); padding: 20px 24px; box-shadow: var(--shadow); border: 1.5px solid var(--sand-dark); }
+    .card + .card { margin-top: 16px; }
+
+    /* Grid */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+    @media (max-width: 600px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+    /* Checklist */
+    .checklist { list-style: none; }
+    .checklist li { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--sand-dark); font-size: 14px; line-height: 1.5; }
+    .checklist li:last-child { border-bottom: none; }
+    .checklist .check { width: 22px; height: 22px; border-radius: 50%; background: var(--green-light); color: var(--green-dark); font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+    .checklist strong { color: var(--brown); display: block; margin-bottom: 2px; }
+    .checklist span { color: var(--text-muted); font-size: 13px; }
+
+    /* Tool cards */
+    .tool-card { background: var(--white); border-radius: var(--radius); padding: 18px 20px; box-shadow: var(--shadow); border: 1.5px solid var(--sand-dark); }
+    .tool-card .tool-icon { font-size: 28px; margin-bottom: 8px; }
+    .tool-card .tool-name { font-size: 15px; font-weight: 700; color: var(--brown); margin-bottom: 6px; }
+    .tool-card .tool-action { font-size: 13px; color: var(--text-muted); background: var(--sand); border-radius: 6px; padding: 6px 10px; line-height: 1.5; }
+    .tool-card .tool-action strong { color: var(--green-dark); }
+
+    /* Value cards */
+    .value-card { background: var(--white); border-radius: var(--radius); padding: 22px 20px; box-shadow: var(--shadow); border: 1.5px solid var(--sand-dark); text-align: center; }
+    .value-card .val-num { width: 36px; height: 36px; background: var(--green); color: white; border-radius: 50%; font-size: 16px; font-weight: 700; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px; }
+    .value-card .val-title { font-size: 15px; font-weight: 700; color: var(--brown); line-height: 1.4; }
+
+    /* Step cards */
+    .step-card { background: var(--white); border-radius: var(--radius); padding: 20px 24px; box-shadow: var(--shadow); border: 1.5px solid var(--sand-dark); display: flex; gap: 16px; align-items: flex-start; }
+    .step-card + .step-card { margin-top: 14px; }
+    .step-num { width: 36px; height: 36px; background: var(--blue); color: white; border-radius: 50%; font-size: 16px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .step-card h3 { font-size: 15px; font-weight: 700; color: var(--brown); margin-bottom: 6px; }
+    .step-card p { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+    .step-tag { display: inline-block; background: var(--blue-light); color: var(--blue); font-size: 11px; font-weight: 700; border-radius: 5px; padding: 2px 7px; margin-bottom: 6px; }
+    .step-tag.green { background: var(--green-light); color: var(--green-dark); }
+
+    /* Handbook link */
+    .handbook-link { display: flex; align-items: center; gap: 16px; background: var(--white); border-radius: var(--radius); padding: 22px 24px; box-shadow: var(--shadow); border: 2px solid var(--green-light); text-decoration: none; color: inherit; transition: border-color 0.2s, box-shadow 0.2s; }
+    .handbook-link:hover { border-color: var(--green); box-shadow: 0 4px 16px rgba(106,154,88,0.15); }
+    .handbook-link .hb-icon { font-size: 40px; flex-shrink: 0; }
+    .handbook-link h3 { font-size: 16px; font-weight: 700; color: var(--brown); margin-bottom: 4px; }
+    .handbook-link p { font-size: 13px; color: var(--text-muted); }
+    .handbook-link .hb-arrow { margin-left: auto; font-size: 20px; color: var(--green); }
+
+    /* Team nav cards */
+    .team-nav-card { background: var(--white); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); border: 1.5px solid var(--sand-dark); text-align: center; cursor: pointer; transition: all 0.2s; }
+    .team-nav-card:hover { border-color: var(--brown-light); transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.10); }
+    .team-nav-card .team-emoji { font-size: 32px; margin-bottom: 8px; }
+    .team-nav-card .team-name { font-size: 14px; font-weight: 700; color: var(--brown); margin-bottom: 4px; }
+    .team-nav-card .team-lock { font-size: 11px; color: var(--text-muted); }
+
+    /* Modals */
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 200; align-items: center; justify-content: center; }
+    .modal-overlay.show { display: flex; }
+    .modal-box { background: var(--white); border-radius: 16px; padding: 36px 32px; width: 100%; max-width: 380px; text-align: center; box-shadow: 0 8px 40px rgba(0,0,0,0.18); }
+    .modal-box .m-emoji { font-size: 40px; margin-bottom: 12px; }
+    .modal-box h2 { font-size: 20px; font-weight: 700; color: var(--brown); margin-bottom: 6px; }
+    .modal-box p { font-size: 13px; color: var(--text-muted); margin-bottom: 20px; }
+    .modal-input { width: 100%; padding: 11px 14px; border: 2px solid var(--sand-dark); border-radius: 8px; font-size: 15px; outline: none; margin-bottom: 12px; transition: border-color 0.2s; }
+    .modal-input:focus { border-color: var(--green); }
+    .modal-error { font-size: 12px; color: var(--red); margin-bottom: 10px; display: none; }
+    .modal-loading { font-size: 13px; color: var(--text-muted); margin-bottom: 8px; display: none; }
+    .btn-primary { width: 100%; background: var(--green); color: white; border: none; border-radius: 8px; padding: 12px; font-size: 15px; font-weight: 700; cursor: pointer; transition: background 0.2s; }
+    .btn-primary:hover { background: var(--green-dark); }
+    .btn-cancel { background: none; border: none; color: var(--text-muted); font-size: 13px; cursor: pointer; margin-top: 12px; text-decoration: underline; }
+
+    /* Team page */
+    #team-page { display: none; }
+    .team-hero { padding: 40px 32px 32px; text-align: center; }
+    .team-hero .t-emoji { font-size: 48px; margin-bottom: 12px; }
+    .team-hero h1 { font-size: 26px; font-weight: 700; color: var(--brown); margin-bottom: 6px; }
+    .team-hero p { font-size: 14px; color: var(--text-muted); }
+    .back-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-muted); background: none; border: none; cursor: pointer; padding: 16px 24px 0; font-weight: 600; }
+    .back-btn:hover { color: var(--green-dark); }
+
+    /* Tabs */
+    .tab-nav { display: flex; gap: 4px; border-bottom: 2px solid var(--sand-dark); margin-bottom: 24px; overflow-x: auto; }
+    .tab-nav button { background: none; border: none; border-bottom: 3px solid transparent; margin-bottom: -2px; padding: 10px 16px; font-size: 13px; font-weight: 600; color: var(--text-muted); cursor: pointer; white-space: nowrap; transition: all 0.2s; }
+    .tab-nav button.active { color: var(--green-dark); border-bottom-color: var(--green); }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* Task list */
+    .task-item { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--sand-dark); font-size: 14px; }
+    .task-item:last-child { border-bottom: none; }
+    .task-bullet { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex-shrink: 0; margin-top: 6px; }
+
+    /* Drive link cards */
+    .drive-card { display: flex; align-items: center; gap: 10px; padding: 11px 14px; background: var(--sand); border-radius: 9px; margin-bottom: 8px; border: 1.5px solid var(--sand-dark); transition: border-color 0.2s; }
+    .drive-card:hover { border-color: var(--green); }
+    .drive-icon { font-size: 20px; flex-shrink: 0; }
+    .drive-link { flex: 1; font-size: 14px; color: var(--blue); text-decoration: none; font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .drive-link:hover { text-decoration: underline; }
+    .remove-btn { background: none; border: 1.5px solid var(--sand-dark); border-radius: 6px; width: 26px; height: 26px; font-size: 16px; line-height: 1; cursor: pointer; color: var(--red); display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.2s; }
+    .remove-btn:hover { background: #fff0f0; border-color: var(--red); }
+    .links-empty { text-align: center; padding: 20px; font-size: 13px; color: var(--text-muted); background: var(--sand); border-radius: 9px; border: 1.5px dashed var(--sand-dark); }
+
+    /* Year sections (KPI) */
+    .year-section { margin-bottom: 20px; }
+    .year-label { font-size: 13px; font-weight: 700; color: var(--brown-light); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+    .year-label::after { content: ''; flex: 1; height: 1px; background: var(--sand-dark); }
+
+    /* Add link form */
+    .add-link-form { background: var(--green-light); border: 1.5px solid #c0d8b0; border-radius: 10px; padding: 16px; margin-top: 16px; }
+    .add-link-form h4 { font-size: 13px; font-weight: 700; color: var(--green-dark); margin-bottom: 12px; }
+    .add-link-form input,
+    .add-link-form select { width: 100%; padding: 9px 12px; border: 1.5px solid var(--sand-dark); border-radius: 7px; font-size: 13px; margin-bottom: 8px; outline: none; background: white; }
+    .add-link-form input:focus,
+    .add-link-form select:focus { border-color: var(--green); }
+    .btn-add { background: var(--green); color: white; border: none; border-radius: 7px; padding: 9px 18px; font-size: 13px; font-weight: 700; cursor: pointer; transition: background 0.2s; }
+    .btn-add:hover { background: var(--green-dark); }
+
+    /* Admin controls */
+    .admin-unlock-btn { display: inline-flex; align-items: center; gap: 5px; background: none; border: 1.5px solid var(--sand-dark); border-radius: 7px; padding: 7px 12px; font-size: 11px; color: var(--text-muted); cursor: pointer; margin-top: 16px; transition: all 0.2s; }
+    .admin-unlock-btn:hover { border-color: var(--brown-light); color: var(--brown); }
+    .admin-badge { display: inline-flex; align-items: center; gap: 5px; background: #fff3cd; border: 1.5px solid #f0c040; border-radius: 7px; padding: 5px 10px; font-size: 11px; color: #8a6820; margin-top: 12px; }
+    .admin-badge button { background: none; border: none; font-size: 11px; color: var(--red); cursor: pointer; text-decoration: underline; padding: 0; margin-left: 6px; }
+
+    footer { text-align: center; padding: 32px; font-size: 12px; color: var(--text-muted); border-top: 1px solid var(--sand-dark); margin-top: 40px; }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <span class="nav-logo">🌵</span>
+  <a href="#" class="active" onclick="showPage('home',this)">🏠 Home</a>
+  <a href="#" onclick="showPage('values',this)">💚 Values</a>
+  <a href="#" onclick="showPage('handbook',this)">📖 Handbook</a>
+  <a href="#" onclick="showPage('daily',this)">✅ Daily Tasks</a>
+  <a href="#" onclick="showPage('teams',this)">👥 My Team</a>
+</nav>
+
+<!-- HOME -->
+<div id="page-home" class="page active">
+  <div class="hero">
+    <span class="emoji">🌵</span>
+    <h1>Welcome to the Team!</h1>
+    <p>We're so happy to have you here. This guide will help you get set up, understand our culture, and hit the ground running.</p>
+  </div>
+  <div class="container">
+    <div class="section-title">🚀 Day 1 Checklist</div>
+    <div class="card">
+      <ul class="checklist">
+        <li><span class="check">1</span><div><strong>Join Slack</strong><span>Ask <strong>Ms. Tho</strong> to send you an invite. Slack is our main communication tool. You will use it every day.</span></div></li>
+        <li><span class="check">2</span><div><strong>Set up LastPass</strong><span>Create your own LastPass account, then let <strong>Ms. Tho</strong> know so she can grant you access to shared passwords.</span></div></li>
+        <li><span class="check">3</span><div><strong>Get your TimeStation account</strong><span>Ask <strong>Ms. Ha</strong> to create a TimeStation account for you. You'll use it to check in and out every day.</span></div></li>
+        <li><span class="check">4</span><div><strong>Read the Employee Handbook</strong><span>Head to the <a href="#" onclick="showPage('handbook',null);return false;" style="color:var(--green-dark);font-weight:600;">📖 Handbook</a> page and read through our policies.</span></div></li>
+        <li><span class="check">5</span><div><strong>Learn the daily routine</strong><span>Visit the <a href="#" onclick="showPage('daily',null);return false;" style="color:var(--green-dark);font-weight:600;">✅ Daily Tasks</a> page to understand your everyday workflow.</span></div></li>
+        <li><span class="check">6</span><div><strong>Go to your team section</strong><span>Visit <a href="#" onclick="showPage('teams',null);return false;" style="color:var(--green-dark);font-weight:600;">👥 My Team</a> and enter your team's password to access your task list, EOS files, and KPIs.</span></div></li>
+      </ul>
+    </div>
+    <div class="section-title" style="margin-top:36px;">🛠 Your Tools</div>
+    <div class="grid-3">
+      <div class="tool-card"><div class="tool-icon">💬</div><div class="tool-name">Slack</div><div class="tool-action">Ask <strong>Ms. Tho</strong> to invite you to the workspace</div></div>
+      <div class="tool-card"><div class="tool-icon">🔑</div><div class="tool-name">LastPass</div><div class="tool-action">Create your account → tell <strong>Ms. Tho</strong> to let you in</div></div>
+      <div class="tool-card"><div class="tool-icon">⏱</div><div class="tool-name">TimeStation</div><div class="tool-action">Ask <strong>Ms. Ha</strong> to create your account</div></div>
+    </div>
+  </div>
+  <footer>🌵 Succulents Box · Employee Onboarding</footer>
+</div>
+
+<!-- VALUES -->
+<div id="page-values" class="page">
+  <div class="hero">
+    <span class="emoji">💚</span>
+    <h1>Our Core Values</h1>
+    <p>These five values guide how we work, how we treat each other, and how we serve our customers.</p>
+  </div>
+  <div class="container">
+    <div class="grid-3" style="margin-bottom:16px;">
+      <div class="value-card"><div class="val-num">1</div><div class="val-title">Do what you love</div></div>
+      <div class="value-card"><div class="val-num">2</div><div class="val-title">Make customers happy</div></div>
+      <div class="value-card"><div class="val-num">3</div><div class="val-title">Sustainable growth &amp; learning</div></div>
+    </div>
+    <div class="grid-2">
+      <div class="value-card"><div class="val-num">4</div><div class="val-title">Supportive &amp; honest teamwork</div></div>
+      <div class="value-card"><div class="val-num">5</div><div class="val-title">Create beautiful &amp; inspirational products</div></div>
+    </div>
+  </div>
+  <footer>🌵 Succulents Box · Employee Onboarding</footer>
+</div>
+
+<!-- HANDBOOK -->
+<div id="page-handbook" class="page">
+  <div class="hero">
+    <span class="emoji">📖</span>
+    <h1>Employee Handbook</h1>
+    <p>Everything you need to know about working at Succulents Box: policies, benefits, and how we operate.</p>
+  </div>
+  <div class="container">
+    <a class="handbook-link" href="https://docs.google.com/document/d/1GJPhm1GmrOvQ5lsR5JxdsjCx3bAhH3Kx5AOsEHCjhTA/edit?tab=t.0" target="_blank" rel="noopener noreferrer">
+      <span class="hb-icon">📄</span>
+      <div><h3>Open Employee Handbook</h3><p>Opens in Google Docs · Read carefully before your first day</p></div>
+      <span class="hb-arrow">↗</span>
+    </a>
+    <div class="card" style="margin-top:20px;background:var(--green-light);border-color:#c0d8b0;">
+      <p style="font-size:14px;color:var(--green-dark);line-height:1.7;">💡 <strong>Tip:</strong> If you can't open the document, make sure you're logged into your company Google account. If you still have issues, reach out to <strong>Ms. Tho</strong> on Slack.</p>
+    </div>
+
+    <!-- BENEFITS SECTION -->
+    <div class="section-title" style="margin-top:36px;">🎁 Benefits at a Glance</div>
+    <div class="card" style="background:#fff8f0;border-color:#f0c890;margin-bottom:20px;">
+      <p style="font-size:14px;color:#8a5a20;line-height:1.7;">⚠️ <strong>Note:</strong> The benefits below apply to full-time employees only. Interns are not eligible for these benefits.</p>
+    </div>
+
+    <!-- Paid Leave -->
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+        <span style="font-size:22px;">🏖</span>
+        <span style="font-size:15px;font-weight:700;color:var(--brown);">Paid Leave</span>
+      </div>
+      <p style="font-size:14px;color:var(--text-muted);line-height:1.8;margin-bottom:10px;">
+        Once you've been with us for <strong style="color:var(--text);">more than 12 months</strong>, you receive <strong style="color:var(--text);">12 paid leave days per year</strong>. If you're newer to the team, you earn <strong style="color:var(--text);">1 paid leave day for each month</strong> you've worked at the company.
+      </p>
+      <p style="font-size:14px;color:var(--text-muted);line-height:1.8;">
+        Any unused paid leave days at the end of the year can carry over to the next year, up to a maximum of <strong style="color:var(--text);">5 days</strong>.
+      </p>
+    </div>
+
+    <!-- WFH -->
+    <div class="card" style="margin-top:16px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+        <span style="font-size:22px;">🏠</span>
+        <span style="font-size:15px;font-weight:700;color:var(--brown);">Work From Home</span>
+      </div>
+      <p style="font-size:14px;color:var(--text-muted);line-height:1.8;">
+        You can work from home <strong style="color:var(--text);">up to 2 days per month</strong>. To keep things balanced, the two days should be <strong style="color:var(--text);">at least 2 weeks apart</strong>. Of course, exceptions are always understood for emergencies, sick days, or unexpected disruptions.
+      </p>
+    </div>
+
+    <!-- KPI Bonus -->
+    <div class="card" style="margin-top:16px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+        <span style="font-size:22px;">📊</span>
+        <span style="font-size:15px;font-weight:700;color:var(--brown);">KPI Bonus</span>
+      </div>
+      <p style="font-size:14px;color:var(--text-muted);line-height:1.8;margin-bottom:14px;">
+        Your bonus is split equally between how the <strong style="color:var(--text);">company</strong> performs and how your <strong style="color:var(--text);">team</strong> performs, with each half worth up to 0.5× your monthly salary.
+      </p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+        <div style="background:var(--sand);border-radius:9px;padding:14px;">
+          <div style="font-size:11px;font-weight:700;color:var(--brown-light);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Company KPI (50%)</div>
+          <p style="font-size:13px;color:var(--text-muted);line-height:1.7;">Tied to the company's annual revenue goal. If we hit 100% of the goal, you earn <strong style="color:var(--green-dark);">0.5× your monthly salary</strong>.</p>
+        </div>
+        <div style="background:var(--sand);border-radius:9px;padding:14px;">
+          <div style="font-size:11px;font-weight:700;color:var(--brown-light);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Team KPI (50%)</div>
+          <p style="font-size:13px;color:var(--text-muted);line-height:1.7;">Tied to your team's KPI achievement. If your team reaches 120%, you earn <strong style="color:var(--green-dark);">0.6× your monthly salary</strong>.</p>
+        </div>
+      </div>
+      <div style="background:var(--green-light);border-radius:9px;padding:14px;font-size:13px;color:var(--green-dark);line-height:1.9;">
+        <strong>Example:</strong> Company at 100% + team at 120% = <strong>1.1× monthly salary bonus</strong> for that period.<br>
+        <strong>Extra:</strong> For every <strong>300,000 VND above the revenue goal</strong>, an extra 0.5 is added to the KPI multiplier, so going above and beyond is always rewarded.
+      </div>
+    </div>
+
+    <!-- Health Insurance -->
+    <div class="card" style="margin-top:16px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+        <span style="font-size:22px;">🏥</span>
+        <span style="font-size:15px;font-weight:700;color:var(--brown);">Health Insurance</span>
+      </div>
+      <p style="font-size:14px;color:var(--text-muted);line-height:1.8;">
+        Health insurance is entirely <strong style="color:var(--text);">optional</strong>. Your salary is the same regardless of whether you choose to enroll or not. No pressure either way.
+      </p>
+    </div>
+
+    <!-- Social Security -->
+    <div class="card" style="margin-top:16px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+        <span style="font-size:22px;">🛡</span>
+        <span style="font-size:15px;font-weight:700;color:var(--brown);">Voluntary Social Security (BHXH TN)</span>
+      </div>
+      <p style="font-size:14px;color:var(--text-muted);line-height:1.8;">
+        If you choose to enroll, the company covers <strong style="color:var(--text);">75%</strong> of the contribution and your share is <strong style="color:var(--text);">25%</strong>, which is deducted directly from your salary. If you opt out, your salary stays exactly as it is.
+      </p>
+    </div>
+
+    <!-- Parking -->
+    <div class="card" style="margin-top:16px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+        <span style="font-size:22px;">🚗</span>
+        <span style="font-size:15px;font-weight:700;color:var(--brown);">Parking Allowance</span>
+      </div>
+      <p style="font-size:14px;color:var(--text-muted);line-height:1.8;">
+        If you commute to the office without a bike, you'll receive a monthly parking allowance of <strong style="color:var(--green-dark);">50,000 VND</strong>. If you ride a bike, this allowance doesn't apply.
+      </p>
+    </div>
+
+  </div>
+  <footer>🌵 Succulents Box · Employee Onboarding</footer>
+</div>
+
+<!-- DAILY TASKS -->
+<div id="page-daily" class="page">
+  <div class="hero" style="background:linear-gradient(135deg,#4a82b0 0%,#2a5f8a 100%);">
+    <span class="emoji">✅</span>
+    <h1>Daily Tasks</h1>
+    <p>These three things apply to <strong>everyone</strong>, every single working day.</p>
+  </div>
+  <div class="container">
+    <div class="step-card">
+      <div class="step-num">1</div>
+      <div>
+        <span class="step-tag">⏱ TimeStation</span>
+        <h3>Check In &amp; Check Out</h3>
+        <p>Open <strong>TimeStation</strong> at the start of your workday and tap <em>Check In</em>. At the end of the day, tap <em>Check Out</em>. Do this every day. This is how attendance is tracked.<br><br>Don't have an account yet? Ask <strong>Ms. Ha</strong> to create one for you.</p>
+      </div>
+    </div>
+    <div class="step-card">
+      <div class="step-num">2</div>
+      <div>
+        <span class="step-tag green">💬 Slack · #daily-updates</span>
+        <h3>Post Your Daily To-Do List</h3>
+        <p>At the <strong>start of each day</strong>, post a short list of what you plan to work on in the <strong>#daily-updates</strong> Slack channel. Just a few bullet points to keep the whole team aligned.</p>
+      </div>
+    </div>
+    <div class="step-card">
+      <div class="step-num">3</div>
+      <div>
+        <span class="step-tag green">🏷 Slack · #attendance-teamvn</span>
+        <h3>Day Off or Working From Home</h3>
+        <p>If you have a <strong>day off</strong> or are <strong>working from home</strong>, do both of these:</p>
+        <ol style="margin-top:8px;padding-left:18px;font-size:13px;color:var(--text-muted);line-height:2.2;">
+          <li><strong>Send a private message</strong> to <strong>Ms. Tho</strong>, <strong>Ms. Ha</strong>, or <strong>Mr. Duc</strong> to let them know</li>
+          <li><strong>Post in #attendance-teamvn</strong> to log it for the team</li>
+        </ol>
+        <div style="margin-top:12px;">
+          <a href="https://docs.google.com/spreadsheets/d/1grpf4V5ygf_D6qta9I5BwpuFpXHcGElSghDhvdsRhP4/edit?gid=848272588#gid=848272588"
+             target="_blank" rel="noopener noreferrer"
+             style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--blue);text-decoration:none;background:var(--blue-light);padding:7px 12px;border-radius:7px;font-weight:600;">
+            📊 View Attendance Sheet ↗
+          </a>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:24px;background:var(--green-light);border-color:#c0d8b0;">
+      <p style="font-size:14px;color:var(--green-dark);line-height:1.7;">📋 <strong>Team-specific tasks</strong> (position task list, weekly EOS files, and KPIs) are in your team section. Go to <a href="#" onclick="showPage('teams',null);return false;" style="color:var(--green-dark);font-weight:700;">👥 My Team</a> to access them.</p>
+    </div>
+  </div>
+  <footer>🌵 Succulents Box · Employee Onboarding</footer>
+</div>
+
+<!-- TEAMS -->
+<div id="page-teams" class="page">
+  <div class="hero" style="background:linear-gradient(135deg,var(--brown-light) 0%,var(--brown) 100%);">
+    <span class="emoji">👥</span>
+    <h1>Team Sections</h1>
+    <p>Select your team below. Each section is password-protected. Ask your manager for the password.</p>
+  </div>
+  <div class="container">
+    <div class="grid-3">
+      <div class="team-nav-card" onclick="openTeam('marketing','📣','Marketing')"><div class="team-emoji">📣</div><div class="team-name">Marketing</div><div class="team-lock">🔒 Password required</div></div>
+      <div class="team-nav-card" onclick="openTeam('customerservice','💬','Customer Service')"><div class="team-emoji">💬</div><div class="team-name">Customer Service</div><div class="team-lock">🔒 Password required</div></div>
+      <div class="team-nav-card" onclick="openTeam('seo','🔍','SEO')"><div class="team-emoji">🔍</div><div class="team-name">SEO</div><div class="team-lock">🔒 Password required</div></div>
+      <div class="team-nav-card" onclick="openTeam('design','🎨','Design')"><div class="team-emoji">🎨</div><div class="team-name">Design</div><div class="team-lock">🔒 Password required</div></div>
+      <div class="team-nav-card" onclick="openTeam('video','🎬','Video')"><div class="team-emoji">🎬</div><div class="team-name">Video</div><div class="team-lock">🔒 Password required</div></div>
+    </div>
+  </div>
+  <footer>🌵 Succulents Box · Employee Onboarding</footer>
+</div>
+
+<!-- TEAM PAGE (unlocked) -->
+<div id="team-page">
+  <button class="back-btn" onclick="closeTeam()">← Back to Teams</button>
+  <div class="team-hero">
+    <div class="t-emoji" id="team-emoji"></div>
+    <h1 id="team-name-heading"></h1>
+    <p>Your position task list, EOS files, and KPIs</p>
+  </div>
+  <div class="container" style="padding-top:0;">
+    <div class="tab-nav">
+      <button class="active" onclick="showTab('tasks',this)">📋 Task List</button>
+      <button onclick="showTab('eos',this)">📁 EOS Files</button>
+      <button onclick="showTab('kpi',this)">📊 KPI Files</button>
+      <button onclick="showTab('handover',this)">📦 Handover</button>
+      <button onclick="showTab('tools',this)">🛠 Tools</button>
+    </div>
+
+    <!-- Tasks -->
+    <div id="tab-tasks" class="tab-content active">
+      <div id="team-tasks-content"></div>
+    </div>
+
+    <!-- EOS -->
+    <div id="tab-eos" class="tab-content">
+      <div class="card">
+        <div class="section-title" style="font-size:16px;margin-bottom:8px;">📁 Weekly EOS Files</div>
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.6;">Fill in your EOS file <strong>every Friday afternoon</strong>. Click a file to open it in Google Drive.</p>
+        <div id="eos-links-list"></div>
+        <div id="eos-add-form" class="add-link-form" style="display:none;">
+          <h4>+ Add EOS File</h4>
+          <input type="text" id="eos-new-name" placeholder="File name (e.g. Q2 2026 Marketing EOS)" />
+          <input type="url" id="eos-new-url" placeholder="Paste Google Drive link here" />
+          <button class="btn-add" onclick="addLink('eos')">Add File</button>
+        </div>
+        <div id="eos-admin-area"></div>
+      </div>
+    </div>
+
+    <!-- KPI -->
+    <div id="tab-kpi" class="tab-content">
+      <div class="card">
+        <div class="section-title" style="font-size:16px;margin-bottom:8px;">📊 KPI Files</div>
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.6;">Track your KPIs. Files are organized by year. Click a file to open it in Google Drive.</p>
+        <div id="kpi-years-container"></div>
+        <div id="kpi-add-form" class="add-link-form" style="display:none;">
+          <h4>+ Add KPI File</h4>
+          <select id="kpi-new-year" onchange="toggleCustomYear()">
+            <option value="2026">2026</option>
+            <option value="2027">2027</option>
+            <option value="custom">Other year…</option>
+          </select>
+          <input type="number" id="kpi-new-year-custom" placeholder="Enter year (e.g. 2028)" style="display:none;" min="2020" max="2099" />
+          <input type="text" id="kpi-new-name" placeholder="File name (e.g. Q1 2026 Marketing KPIs)" />
+          <input type="url" id="kpi-new-url" placeholder="Paste Google Drive link here" />
+          <button class="btn-add" onclick="addLink('kpi')">Add File</button>
+        </div>
+        <div id="kpi-admin-area"></div>
+      </div>
+    </div>
+
+    <!-- Handover -->
+    <div id="tab-handover" class="tab-content">
+      <div class="card">
+        <div class="section-title" style="font-size:16px;margin-bottom:8px;">📦 Handover Files</div>
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.6;">Documents left by the previous person in this role: processes, notes, and context to help you get up to speed.</p>
+        <div id="handover-links-list"></div>
+        <div id="handover-add-form" class="add-link-form" style="display:none;">
+          <h4>+ Add Handover File</h4>
+          <input type="text" id="handover-new-name" placeholder="File name (e.g. Role Handover Notes Jan 2026)" />
+          <input type="url" id="handover-new-url" placeholder="Paste Google Drive link here" />
+          <button class="btn-add" onclick="addLink('handover')">Add File</button>
+        </div>
+        <div id="handover-admin-area"></div>
+      </div>
+    </div>
+
+    <!-- Tools -->
+    <div id="tab-tools" class="tab-content">
+      <div id="team-tools-content"></div>
+    </div>
+  </div>
+  <footer>🌵 Succulents Box · Employee Onboarding</footer>
+</div>
+
+<!-- TEAM PASSWORD MODAL -->
+<div id="pw-overlay" class="modal-overlay">
+  <div class="modal-box">
+    <div class="m-emoji" id="pw-emoji">🔒</div>
+    <h2 id="pw-title">Enter Team Password</h2>
+    <p id="pw-subtitle">This section is for team members only.</p>
+    <input type="password" id="pw-input" class="modal-input" placeholder="Enter password…" onkeydown="if(event.key==='Enter') submitTeamPassword()" />
+    <div id="pw-error" class="modal-error">❌ Incorrect password. Please try again.</div>
+    <div id="pw-loading" class="modal-loading">Checking…</div>
+    <button class="btn-primary" onclick="submitTeamPassword()">Unlock 🔓</button><br>
+    <button class="btn-cancel" onclick="closeTeamModal()">Cancel</button>
+  </div>
+</div>
+
+<!-- ADMIN PASSWORD MODAL -->
+<div id="admin-overlay" class="modal-overlay">
+  <div class="modal-box">
+    <div class="m-emoji">🔧</div>
+    <h2>Admin Access</h2>
+    <p>Enter the admin password to add or remove files.</p>
+    <input type="password" id="admin-input" class="modal-input" placeholder="Admin password…" onkeydown="if(event.key==='Enter') submitAdminPassword()" />
+    <div id="admin-error" class="modal-error">❌ Incorrect admin password.</div>
+    <div id="admin-loading" class="modal-loading">Checking…</div>
+    <button class="btn-primary" onclick="submitAdminPassword()">Unlock Admin 🔓</button><br>
+    <button class="btn-cancel" onclick="closeAdminModal()">Cancel</button>
+  </div>
+</div>
+
+<script>
+  // ── Team data ──────────────────────────────────────────────────
+  const TEAM_DATA = {
+    marketing:      { emoji:'📣', name:'Marketing',       tasks:['Plan and schedule social media content calendar','Write and publish blog posts and email newsletters','Monitor social media engagement and respond to comments','Coordinate with Design team on creative assets','Track campaign performance and report weekly','Research trending topics and competitor activity'], tools:[{icon:'💬',name:'Slack',note:'Main team communication'},{icon:'🔑',name:'LastPass',note:'Shared passwords & logins'},{icon:'📅',name:'Content Calendar',note:'Ask your manager for access'}] },
+    customerservice:{ emoji:'💬', name:'Customer Service',tasks:['Respond to all customer emails within 24 hours','Handle order inquiries, shipping questions, and complaints','Process refund and replacement requests','Update order notes and customer records','Escalate complex issues to manager when needed','Compile daily ticket summary at end of day'], tools:[{icon:'💬',name:'Slack',note:'Main team communication'},{icon:'🔑',name:'LastPass',note:'Shared passwords & logins'},{icon:'📧',name:'Help Desk',note:'Ask your manager for access'}] },
+    seo:            { emoji:'🔍', name:'SEO',             tasks:['Conduct keyword research for new content opportunities','Optimize existing pages (title tags, meta descriptions, headers)','Monitor keyword rankings and organic traffic weekly','Build and track backlinks','Run technical SEO audits and flag issues','Collaborate with Content/Marketing on new articles'], tools:[{icon:'💬',name:'Slack',note:'Main team communication'},{icon:'🔑',name:'LastPass',note:'Shared passwords & logins'},{icon:'🔍',name:'SEO Tools',note:'Ask your manager for access'}] },
+    design:         { emoji:'🎨', name:'Design',          tasks:['Create social media graphics per content calendar','Design email newsletter templates and banners','Produce product photography edits and lifestyle images','Maintain brand consistency across all assets','Collaborate with Marketing and Video teams on campaigns','Organize and archive completed assets in shared folder'], tools:[{icon:'💬',name:'Slack',note:'Main team communication'},{icon:'🔑',name:'LastPass',note:'Shared passwords & logins'},{icon:'🎨',name:'Design Tools',note:'Ask your manager for access'}] },
+    video:          { emoji:'🎬', name:'Video',           tasks:['Film and edit product unboxing and lifestyle videos','Create short-form content for Instagram Reels and TikTok','Follow the monthly content calendar for video topics','Add captions and optimize videos for each platform','Organize raw footage and final files in shared drive','Collaborate with Design on thumbnails and overlays'], tools:[{icon:'💬',name:'Slack',note:'Main team communication'},{icon:'🔑',name:'LastPass',note:'Shared passwords & logins'},{icon:'🎬',name:'Video Editing Tools',note:'Ask your manager for access'}] }
+  };
+
+  // ── State ──────────────────────────────────────────────────────
+  let currentTeam   = null;
+  let adminUnlocked = sessionStorage.getItem('adminUnlocked') === 'true';
+  let unlockedTeams = JSON.parse(sessionStorage.getItem('unlockedTeams') || '[]');
+
+  // ── Navigation ─────────────────────────────────────────────────
+  function showPage(id, linkEl) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('team-page').style.display = 'none';
+    document.querySelectorAll('nav a').forEach(a => a.classList.remove('active'));
+    const pg = document.getElementById('page-' + id);
+    if (pg) pg.classList.add('active');
+    if (linkEl) linkEl.classList.add('active');
+  }
+
+  // ── Team unlock ────────────────────────────────────────────────
+  function openTeam(teamId, emoji, name) {
+    currentTeam = teamId;
+    if (unlockedTeams.includes(teamId)) { renderTeamPage(teamId); }
+    else { showTeamModal(teamId, emoji, name); }
+  }
+
+  function showTeamModal(teamId, emoji, name) {
+    document.getElementById('pw-emoji').textContent = emoji + ' 🔒';
+    document.getElementById('pw-title').textContent = name + ' Team';
+    document.getElementById('pw-subtitle').textContent = 'Enter the password to access the ' + name + ' team section.';
+    document.getElementById('pw-input').value = '';
+    document.getElementById('pw-error').style.display = 'none';
+    document.getElementById('pw-loading').style.display = 'none';
+    document.getElementById('pw-overlay').classList.add('show');
+    setTimeout(() => document.getElementById('pw-input').focus(), 100);
+  }
+
+  function closeTeamModal() { document.getElementById('pw-overlay').classList.remove('show'); currentTeam = null; }
+
+  async function submitTeamPassword() {
+    const password = document.getElementById('pw-input').value.trim();
+    if (!password) return;
+    document.getElementById('pw-error').style.display = 'none';
+    document.getElementById('pw-loading').style.display = 'block';
+    try {
+      const res  = await fetch('/.netlify/functions/check-password', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ team: currentTeam, password }) });
+      const data = await res.json();
+      document.getElementById('pw-loading').style.display = 'none';
+      if (data.success) {
+        unlockedTeams.push(currentTeam);
+        sessionStorage.setItem('unlockedTeams', JSON.stringify(unlockedTeams));
+        document.getElementById('pw-overlay').classList.remove('show');
+        renderTeamPage(currentTeam);
+      } else {
+        document.getElementById('pw-error').style.display = 'block';
+        document.getElementById('pw-input').value = '';
+        document.getElementById('pw-input').focus();
+      }
+    } catch {
+      document.getElementById('pw-loading').style.display = 'none';
+      document.getElementById('pw-error').textContent = '⚠️ Could not connect. Please try again.';
+      document.getElementById('pw-error').style.display = 'block';
+    }
+  }
+
+  // ── Admin unlock (per team) ────────────────────────────────────
+  function showAdminModal() {
+    document.getElementById('admin-input').value = '';
+    document.getElementById('admin-error').style.display = 'none';
+    document.getElementById('admin-loading').style.display = 'none';
+    document.getElementById('admin-overlay').classList.add('show');
+    setTimeout(() => document.getElementById('admin-input').focus(), 100);
+  }
+
+  function closeAdminModal() { document.getElementById('admin-overlay').classList.remove('show'); }
+
+  async function submitAdminPassword() {
+    const password = document.getElementById('admin-input').value.trim();
+    if (!password) return;
+    document.getElementById('admin-error').style.display = 'none';
+    document.getElementById('admin-loading').style.display = 'block';
+    try {
+      // Accepts either global PASSWORD_ADMIN or team-specific PASSWORD_ADMIN_<TEAM>
+      const res  = await fetch('/.netlify/functions/check-password', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ team: 'admin', teamName: currentTeam, password }) });
+      const data = await res.json();
+      document.getElementById('admin-loading').style.display = 'none';
+      if (data.success) {
+        adminUnlocked = true;
+        sessionStorage.setItem('adminUnlocked', 'true');
+        sessionStorage.setItem('adminPassword', password);
+        closeAdminModal();
+        renderAdminAreas();
+        ['eos','kpi','handover'].forEach(t => loadLinks(t));
+      } else {
+        document.getElementById('admin-error').style.display = 'block';
+        document.getElementById('admin-input').value = '';
+        document.getElementById('admin-input').focus();
+      }
+    } catch {
+      document.getElementById('admin-loading').style.display = 'none';
+      document.getElementById('admin-error').textContent = '⚠️ Could not connect. Please try again.';
+      document.getElementById('admin-error').style.display = 'block';
+    }
+  }
+
+  function lockAdmin() {
+    adminUnlocked = false;
+    sessionStorage.removeItem('adminUnlocked');
+    sessionStorage.removeItem('adminPassword');
+    renderAdminAreas();
+    loadLinks('eos');
+    loadLinks('kpi');
+  }
+
+  function renderAdminAreas() {
+    ['eos', 'kpi', 'handover'].forEach(type => {
+      const addForm   = document.getElementById(`${type}-add-form`);
+      const adminArea = document.getElementById(`${type}-admin-area`);
+      if (!addForm || !adminArea) return;
+      if (adminUnlocked) {
+        addForm.style.display = 'block';
+        adminArea.innerHTML = `<div class="admin-badge">🔧 Admin mode active <button onclick="lockAdmin()">Lock</button></div>`;
+      } else {
+        addForm.style.display = 'none';
+        adminArea.innerHTML = `<button class="admin-unlock-btn" onclick="showAdminModal()">🔒 Admin: manage files</button>`;
+      }
+    });
+  }
+
+  // ── Render team page ───────────────────────────────────────────
+  function renderTeamPage(teamId) {
+    const data = TEAM_DATA[teamId];
+    if (!data) return;
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('team-page').style.display = 'block';
+    document.getElementById('team-emoji').textContent = data.emoji;
+    document.getElementById('team-name-heading').textContent = data.name + ' Team';
+
+    // Tasks
+    document.getElementById('team-tasks-content').innerHTML = `
+      <div class="card">
+        <div class="section-title" style="font-size:16px;margin-bottom:16px;">📋 Position Task List</div>
+        ${data.tasks.map(t => `<div class="task-item"><div class="task-bullet"></div><span>${t}</span></div>`).join('')}
+      </div>`;
+
+    // Tools
+    document.getElementById('team-tools-content').innerHTML = `
+      <div class="grid-3">
+        ${data.tools.map(t => `<div class="tool-card"><div class="tool-icon">${t.icon}</div><div class="tool-name">${t.name}</div><div class="tool-action">${t.note}</div></div>`).join('')}
+      </div>`;
+
+    showTab('tasks', document.querySelector('.tab-nav button'));
+    renderAdminAreas();
+    window.scrollTo(0, 0);
+  }
+
+  // ── Load & render links ────────────────────────────────────────
+  async function loadLinks(type) {
+    if (!currentTeam) return;
+    const containerId = type === 'kpi' ? 'kpi-years-container' : `${type}-links-list`;
+    const container   = document.getElementById(containerId);
+    container.innerHTML = '<p style="font-size:13px;color:var(--text-muted);padding:8px 0;">Loading…</p>';
+    try {
+      const res  = await fetch(`/.netlify/functions/get-links?team=${currentTeam}&type=${type}`);
+      const data = await res.json();
+      if (type === 'kpi') renderKpiYears(data.links || {});
+      else renderFlatList(type, data.links || []);
+    } catch {
+      container.innerHTML = '<p style="font-size:13px;color:var(--red);padding:8px 0;">Could not load files. Please refresh.</p>';
+    }
+  }
+
+  // EOS / Handover: flat list
+  function renderFlatList(type, links) {
+    const el    = document.getElementById(`${type}-links-list`);
+    const label = type === 'eos' ? 'EOS' : 'Handover';
+    if (!links.length) { el.innerHTML = `<div class="links-empty">No ${label} files added yet.</div>`; return; }
+    el.innerHTML = links.map(l => driveCard(l, type, null)).join('');
+  }
+
+  // KPI: grouped by year, always show 2026 + 2027, plus any other years in the data
+  function renderKpiYears(linksByYear) {
+    const allYears = new Set(['2026', '2027', ...Object.keys(linksByYear)]);
+    const sorted   = [...allYears].sort();
+    const el       = document.getElementById('kpi-years-container');
+    el.innerHTML   = sorted.map(year => {
+      const links = linksByYear[year] || [];
+      const cards = links.length
+        ? links.map(l => driveCard(l, 'kpi', year)).join('')
+        : `<div class="links-empty">No KPI files for ${year} yet.</div>`;
+      return `<div class="year-section"><div class="year-label">📅 ${year}</div>${cards}</div>`;
+    }).join('');
+  }
+
+  // Build a drive link card (with remove button if admin)
+  function driveCard(link, type, year) {
+    const removeAttr = year
+      ? `onclick="removeLink('${type}', ${link.id}, '${year}')"`
+      : `onclick="removeLink('${type}', ${link.id}, null)"`;
+    return `
+      <div class="drive-card">
+        <span class="drive-icon">📄</span>
+        <a class="drive-link" href="${esc(link.url)}" target="_blank" rel="noopener noreferrer">${esc(link.name)}</a>
+        ${adminUnlocked ? `<button class="remove-btn" title="Remove" ${removeAttr}>×</button>` : ''}
+      </div>`;
+  }
+
+  // ── Add link ───────────────────────────────────────────────────
+  async function addLink(type) {
+    const nameInput = document.getElementById(`${type}-new-name`);
+    const urlInput  = document.getElementById(`${type}-new-url`);
+    const name = nameInput.value.trim();
+    const url  = urlInput.value.trim();
+    if (!url) { urlInput.focus(); return; }
+
+    let year = null;
+    if (type === 'kpi') {
+      const yearSel    = document.getElementById('kpi-new-year').value;
+      const yearCustom = document.getElementById('kpi-new-year-custom').value.trim();
+      year = yearSel === 'custom' ? yearCustom : yearSel;
+      if (!year) { document.getElementById('kpi-new-year-custom').focus(); return; }
+    }
+
+    const adminPassword = sessionStorage.getItem('adminPassword');
+    try {
+      const res  = await fetch('/.netlify/functions/manage-links', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'add', team: currentTeam, type, year, link:{ name: name || url, url }, adminPassword }) });
+      const data = await res.json();
+      if (data.success) {
+        nameInput.value = ''; urlInput.value = '';
+        if (type === 'kpi') renderKpiYears(data.links);
+        else renderFlatList(type, data.links);
+      } else { alert('Error: check your admin password and try again.'); }
+    } catch { alert('Could not add file. Please try again.'); }
+  }
+
+  // ── Remove link ────────────────────────────────────────────────
+  async function removeLink(type, id, year) {
+    if (!confirm('Remove this file link?')) return;
+    const adminPassword = sessionStorage.getItem('adminPassword');
+    try {
+      const res  = await fetch('/.netlify/functions/manage-links', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'remove', team: currentTeam, type, year, id, adminPassword }) });
+      const data = await res.json();
+      if (data.success) {
+        if (type === 'kpi') renderKpiYears(data.links);
+        else renderFlatList(type, data.links);
+      } else { alert('Error removing file. Please try again.'); }
+    } catch { alert('Could not remove file. Please try again.'); }
+  }
+
+  // ── Tabs ───────────────────────────────────────────────────────
+  function showTab(id, btn) {
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-nav button').forEach(b => b.classList.remove('active'));
+    document.getElementById('tab-' + id).classList.add('active');
+    if (btn) btn.classList.add('active');
+    if (id === 'eos' || id === 'kpi' || id === 'handover') loadLinks(id);
+  }
+
+  function closeTeam() {
+    document.getElementById('team-page').style.display = 'none';
+    currentTeam = null;
+    adminUnlocked = false;
+    sessionStorage.removeItem('adminUnlocked');
+    sessionStorage.removeItem('adminPassword');
+    showPage('teams', null);
+    document.querySelectorAll('nav a').forEach(a => { if (a.textContent.includes('My Team')) a.classList.add('active'); });
+  }
+
+  // KPI custom year toggle
+  function toggleCustomYear() {
+    const sel = document.getElementById('kpi-new-year').value;
+    document.getElementById('kpi-new-year-custom').style.display = sel === 'custom' ? 'block' : 'none';
+  }
+
+  function esc(str) { return String(str).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  document.getElementById('pw-overlay').addEventListener('click',    e => { if (e.target===e.currentTarget) closeTeamModal(); });
+  document.getElementById('admin-overlay').addEventListener('click', e => { if (e.target===e.currentTarget) closeAdminModal(); });
+</script>
+</body>
+</html>
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
