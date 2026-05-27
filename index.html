@@ -430,28 +430,8 @@
     <p>Select your team below. Each section is password-protected. Ask your manager for the password.</p>
   </div>
   <div class="container">
-    <div class="grid-3">
-      <div class="team-nav-card" onclick="openTeam('marketing','📣','Marketing')"><div class="team-emoji">📣</div><div class="team-name">Marketing</div><div class="team-lock">🔒 Password required</div></div>
-      <div class="team-nav-card" onclick="openTeam('customerservice','💬','Customer Service')"><div class="team-emoji">💬</div><div class="team-name">Customer Service</div><div class="team-lock">🔒 Password required</div></div>
-      <div class="team-nav-card" onclick="openTeam('seo','🔍','SEO')"><div class="team-emoji">🔍</div><div class="team-name">SEO</div><div class="team-lock">🔒 Password required</div></div>
-      <div class="team-nav-card" onclick="openTeam('design','🎨','Design')"><div class="team-emoji">🎨</div><div class="team-name">Design</div><div class="team-lock">🔒 Password required</div></div>
-      <div class="team-nav-card" onclick="openTeam('video','🎬','Video')"><div class="team-emoji">🎬</div><div class="team-name">Video</div><div class="team-lock">🔒 Password required</div></div>
-    </div>
-  </div>
-  <footer>🌵 Succulents Box · Employee Onboarding</footer>
-</div>
-
-<!-- TEAM PAGE (unlocked) -->
-<div id="team-page">
-  <button class="back-btn" onclick="closeTeam()">← Back to Teams</button>
-  <div class="team-hero">
-    <div class="t-emoji" id="team-emoji"></div>
-    <h1 id="team-name-heading"></h1>
-    <p>Your position task list, EOS files, and KPIs</p>
-  </div>
-  <div class="container" style="padding-top:0;">
     <!-- Revenue Goals -->
-    <div class="card goals-card" id="goals-card">
+    <div class="card goals-card" id="goals-card" style="margin-bottom:24px;">
       <div class="goals-header">
         <div class="section-title">🎯 Revenue Goals</div>
         <button class="edit-btn" id="goals-edit-btn" title="Edit goals" onclick="editGoals()" style="display:none;">✏</button>
@@ -482,13 +462,33 @@
             <input id="goal-quarter-input" type="text" placeholder="e.g. $300,000" />
           </div>
         </div>
-        <div style="display:flex;gap:8px;">
+        <div style="display:flex;gap:8px;margin-top:12px;">
           <button class="edit-save-btn" onclick="saveGoals()">Save</button>
           <button class="edit-cancel-btn" onclick="cancelGoals()">Cancel</button>
         </div>
       </div>
     </div>
 
+    <div class="grid-3">
+      <div class="team-nav-card" onclick="openTeam('marketing','📣','Marketing')"><div class="team-emoji">📣</div><div class="team-name">Marketing</div><div class="team-lock">🔒 Password required</div></div>
+      <div class="team-nav-card" onclick="openTeam('customerservice','💬','Customer Service')"><div class="team-emoji">💬</div><div class="team-name">Customer Service</div><div class="team-lock">🔒 Password required</div></div>
+      <div class="team-nav-card" onclick="openTeam('seo','🔍','SEO')"><div class="team-emoji">🔍</div><div class="team-name">SEO</div><div class="team-lock">🔒 Password required</div></div>
+      <div class="team-nav-card" onclick="openTeam('design','🎨','Design')"><div class="team-emoji">🎨</div><div class="team-name">Design</div><div class="team-lock">🔒 Password required</div></div>
+      <div class="team-nav-card" onclick="openTeam('video','🎬','Video')"><div class="team-emoji">🎬</div><div class="team-name">Video</div><div class="team-lock">🔒 Password required</div></div>
+    </div>
+  </div>
+  <footer>🌵 Succulents Box · Employee Onboarding</footer>
+</div>
+
+<!-- TEAM PAGE (unlocked) -->
+<div id="team-page">
+  <button class="back-btn" onclick="closeTeam()">← Back to Teams</button>
+  <div class="team-hero">
+    <div class="t-emoji" id="team-emoji"></div>
+    <h1 id="team-name-heading"></h1>
+    <p>Your position task list, EOS files, and KPIs</p>
+  </div>
+  <div class="container" style="padding-top:0;">
     <div class="tab-nav">
       <button class="active" onclick="showTab('tasks',this)">📋 Task List</button>
       <button onclick="showTab('eos',this)">📁 EOS Files</button>
