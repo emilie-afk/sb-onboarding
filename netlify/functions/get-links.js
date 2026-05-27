@@ -38,7 +38,7 @@ exports.handler = async function (event) {
     const data  = await store.get(key, { type: 'json' });
 
     // Default: kpi → {}, goals → { yearGoal:'', quarterGoal:'' }, others → []
-    const fallback = type === 'kpi' ? {} : type === 'goals' ? { yearGoal: '', quarterGoal: '' } : [];
+    const fallback = (type === 'kpi' || type === 'goals') ? {} : [];
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
