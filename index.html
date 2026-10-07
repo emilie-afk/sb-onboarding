@@ -866,15 +866,7 @@
     page.appendChild(pager);
   });
 
-  function showPage(id) {
-    const target = document.getElementById(id);
-    if (!target || !target.classList.contains('page')) {
-      if (id !== 'home') showPage('home');
-      return;
-    }
-    // Hide team workspace whenever navigating to a page
-    document.getElementById('team-page').style.display = 'none';
-    pages.forEach(page => page.classList.toggle('active', page === target));
+  function setActiveJourneyStep(id) {
     journeySteps.forEach(step => {
       const active = step.dataset.page === id;
       step.classList.toggle('active', active);
@@ -885,6 +877,18 @@
         step.removeAttribute('aria-current');
       }
     });
+  }
+
+  function showPage(id) {
+    const target = document.getElementById(id);
+    if (!target || !target.classList.contains('page')) {
+      if (id !== 'home') showPage('home');
+      return;
+    }
+    // Hide team workspace whenever navigating to a page
+    document.getElementById('team-page').style.display = 'none';
+    pages.forEach(page => page.classList.toggle('active', page === target));
+    setActiveJourneyStep(id);
     history.replaceState(null, '', '#' + id);
     window.scrollTo({ top: 0, behavior: 'smooth' });
     if (id === 'teams') loadGoals();
@@ -920,7 +924,35 @@
   const modalCopy    = document.getElementById('modal-copy');
   const formNote     = document.getElementById('form-note');
 
+  const TEAMS = {
+    marketing:       { emoji: '📣', name: 'Marketing' },
+    customerservice: { emoji: '💬', name: 'Customer Service' },
+    seo:             { emoji: '🔍', name: 'SEO' },
+    design:          { emoji: '🎨', name: 'Design' },
+    video:           { emoji: '🎬', name: 'Video' }
+  };
+
+  // ── Auth request tracking ────────────────────────────────────
+  // Each submit gets a generation number. Cancel / Escape / backdrop click,
+  // reopening the modal, or switching teams bumps the generation so any
+  // in-flight response is ignored when it arrives.
+  const unlockBtn    = document.getElementById('unlock-btn');
+  let authGeneration = 0;
+  let authPending    = false;
+
+  function setAuthPending(pending) {
+    authPending = pending;
+    unlockBtn.disabled = pending;
+    unlockBtn.setAttribute('aria-busy', pending ? 'true' : 'false');
+  }
+
+  function invalidateAuth() {
+    authGeneration++;
+    setAuthPending(false);
+  }
+
   function openTeam(teamId, emoji, name) {
+    invalidateAuth();
     currentTeam = teamId;
     if (unlockedTeams.includes(teamId)) {
       renderTeamPage(teamId, emoji, name);
@@ -934,7 +966,13 @@
     }
   }
 
-  function closeTeamModal() { teamModal.classList.remove('open'); currentTeam = null; }
+  function closeTeamModal() {
+    if (!teamModal.classList.contains('open')) return;
+    invalidateAuth();
+    teamModal.classList.remove('open');
+    // Only clear the team if its workspace isn't currently showing
+    if (document.getElementById('team-page').style.display !== 'block') currentTeam = null;
+  }
 
   document.getElementById('cancel-modal').addEventListener('click', closeTeamModal);
   teamModal.addEventListener('click', e => { if (e.target === teamModal) closeTeamModal(); });
@@ -943,36 +981,66 @@
   pwInput.addEventListener('keydown', e => { if (e.key === 'Enter') submitTeamPassword(); });
 
   async function submitTeamPassword() {
+    if (authPending) return;                       // no duplicate submissions
     const password = pwInput.value.trim();
-    if (!password) return;
+    if (!password || !currentTeam || !teamModal.classList.contains('open')) return;
+    const teamId = currentTeam;
+    const gen    = ++authGeneration;
+    const isStale = () => gen !== authGeneration || currentTeam !== teamId;
+    const showError = msg => {
+      formNote.style.color = 'var(--terracotta)';
+      formNote.textContent = msg;
+    };
+    setAuthPending(true);
     formNote.style.color = 'var(--muted)';
     formNote.textContent = 'Checking…';
+
+    // Step 1: authentication (network / server errors only)
+    let res, data = null;
     try {
-      const res  = await fetch('/.netlify/functions/check-password', {
+      res = await fetch('/.netlify/functions/check-password', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ team: currentTeam, password })
+        body: JSON.stringify({ team: teamId, password })
       });
-      const data = await res.json();
-      if (data.success) {
-        unlockedTeams.push(currentTeam);
-        sessionStorage.setItem('unlockedTeams', JSON.stringify(unlockedTeams));
-        teamModal.classList.remove('open');
-        formNote.textContent = '';
-        loadGoals();
-        // Find emoji + name for this team
-        const TEAM_META = { marketing:'📣', customerservice:'💬', seo:'🔍', design:'🎨', video:'🎬' };
-        const TEAM_NAMES = { marketing:'Marketing', customerservice:'Customer Service', seo:'SEO', design:'Design', video:'Video' };
-        renderTeamPage(currentTeam, TEAM_META[currentTeam], TEAM_NAMES[currentTeam]);
-      } else {
-        formNote.style.color = 'var(--terracotta)';
-        formNote.textContent = 'Incorrect password. Please try again.';
-        pwInput.value = '';
-        pwInput.focus();
-      }
-    } catch {
-      formNote.style.color = 'var(--terracotta)';
-      formNote.textContent = 'Could not connect. Please try again.';
+      try { data = await res.json(); } catch { data = null; }
+    } catch (err) {
+      if (isStale()) return;
+      console.error('Team password check failed:', err);
+      setAuthPending(false);
+      showError('Could not connect. Please try again.');
+      return;
     }
+    if (isStale()) return;                         // cancelled / reopened / switched team
+    setAuthPending(false);
+
+    if (res.status >= 500) {
+      console.error('Team password check server error:', res.status, data);
+      showError('The server had a problem checking your password. Please try again in a moment.');
+      return;
+    }
+
+    const rejected = res.status === 401 || (res.ok && data && data.success === false);
+    if (rejected) {
+      showError('Incorrect password. Please try again.');
+      pwInput.value = '';
+      pwInput.focus();
+      return;
+    }
+
+    if (!res.ok || !data || data.success !== true) {
+      console.error('Unexpected password check response:', res.status, data);
+      showError('Could not verify your password (error ' + res.status + '). Please try again.');
+      return;
+    }
+
+    // Step 2: authenticated — open the workspace (UI errors reported separately)
+    if (!unlockedTeams.includes(teamId)) unlockedTeams.push(teamId);
+    sessionStorage.setItem('unlockedTeams', JSON.stringify(unlockedTeams));
+    teamModal.classList.remove('open');
+    formNote.textContent = '';
+    loadGoals();
+    const meta = TEAMS[teamId] || { emoji: '', name: teamId };
+    renderTeamPage(teamId, meta.emoji, meta.name);
   }
 
   // ── Admin modal ──────────────────────────────────────────────
@@ -1055,21 +1123,41 @@
 
   // ── Render team workspace ────────────────────────────────────
   function renderTeamPage(teamId, emoji, name) {
-    pages.forEach(p => p.classList.remove('active'));
-    navLinks.forEach(l => l.classList.remove('active'));
     const tp = document.getElementById('team-page');
+    currentTeam = teamId;
+    pages.forEach(p => p.classList.remove('active'));
+    setActiveJourneyStep('teams');        // keep "My team" highlighted + aria-current
     tp.style.display = 'block';
-    document.getElementById('team-emoji').textContent       = emoji;
-    document.getElementById('team-name-heading').textContent = name + ' Team';
-    showTab('tasks', document.querySelector('.tab-nav button'));
-    renderAdminAreas();
-    loadLinks('tasks');
+    try {
+      document.getElementById('team-emoji').textContent       = emoji;
+      document.getElementById('team-name-heading').textContent = name + ' Team';
+      showTab('tasks', document.querySelector('.tab-nav button'));   // also loads Task List
+      renderAdminAreas();
+    } catch (err) {
+      console.error('Team workspace render failed:', err);
+      showWorkspaceError('Something went wrong opening this workspace. Please refresh the page and try again.');
+    }
     history.replaceState(null, '', '#team');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
+  function showWorkspaceError(message) {
+    const ws = document.querySelector('#team-page .workspace');
+    if (!ws) return;
+    let box = document.getElementById('workspace-error');
+    if (!box) {
+      box = document.createElement('p');
+      box.id = 'workspace-error';
+      box.className = 'links-error';
+      box.setAttribute('role', 'alert');
+      ws.prepend(box);
+    }
+    box.textContent = message;
+  }
+
   function closeTeam() {
     document.getElementById('team-page').style.display = 'none';
+    document.getElementById('workspace-error')?.remove();
     currentTeam   = null;
     adminUnlocked = false;
     sessionStorage.removeItem('adminUnlocked');
@@ -1090,17 +1178,22 @@
   // ── Load & render links ──────────────────────────────────────
   async function loadLinks(type) {
     if (!currentTeam) return;
+    const team        = currentTeam;
     const containerId = type === 'kpi' ? 'kpi-years-container' : `${type}-links-list`;
     const container   = document.getElementById(containerId);
     if (!container) return;
     container.innerHTML = '<p class="links-loading">Loading…</p>';
     try {
-      const res  = await fetch(`/.netlify/functions/get-links?team=${currentTeam}&type=${type}`);
+      const res  = await fetch(`/.netlify/functions/get-links?team=${encodeURIComponent(team)}&type=${type}`);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
+      if (team !== currentTeam) return;   // user switched teams while loading
       if (type === 'kpi') renderKpiYears(data.links || {});
       else renderFlatList(type, data.links || []);
-    } catch {
-      container.innerHTML = '<p class="links-error">Could not load files. Please refresh.</p>';
+    } catch (err) {
+      console.error(`loadLinks(${type}) failed:`, err);
+      if (team !== currentTeam) return;
+      container.innerHTML = '<p class="links-error" role="alert">Could not load files. Please refresh.</p>';
     }
   }
 
