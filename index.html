@@ -953,6 +953,7 @@
 
   function openTeam(teamId, emoji, name) {
     invalidateAuth();
+    invalidateAdminAuth();
     currentTeam = teamId;
     if (unlockedTeams.includes(teamId)) {
       renderTeamPage(teamId, emoji, name);
@@ -1048,13 +1049,35 @@
   const adminInput = document.getElementById('admin-input');
   const adminNote  = document.getElementById('admin-note');
 
+  // Same request-generation pattern as the team password: cancel / Escape /
+  // backdrop, reopening, locking, leaving or switching team all invalidate.
+  const adminUnlockBtn    = document.getElementById('admin-unlock-btn');
+  let adminAuthGeneration = 0;
+  let adminAuthPending    = false;
+
+  function setAdminAuthPending(pending) {
+    adminAuthPending = pending;
+    adminUnlockBtn.disabled = pending;
+    adminUnlockBtn.setAttribute('aria-busy', pending ? 'true' : 'false');
+  }
+
+  function invalidateAdminAuth() {
+    adminAuthGeneration++;
+    setAdminAuthPending(false);
+  }
+
   function showAdminModal() {
+    invalidateAdminAuth();
     adminInput.value = '';
     adminNote.textContent = '';
     adminModal.classList.add('open');
     setTimeout(() => adminInput.focus(), 50);
   }
-  function closeAdminModal() { adminModal.classList.remove('open'); }
+  function closeAdminModal() {
+    if (!adminModal.classList.contains('open')) return;
+    invalidateAdminAuth();
+    adminModal.classList.remove('open');
+  }
 
   document.getElementById('cancel-admin').addEventListener('click', closeAdminModal);
   adminModal.addEventListener('click', e => { if (e.target === adminModal) closeAdminModal(); });
@@ -1067,37 +1090,68 @@
   });
 
   async function submitAdminPassword() {
+    if (adminAuthPending) return;                  // no duplicate submissions
     const password = adminInput.value.trim();
-    if (!password) return;
+    if (!password || !currentTeam || !adminModal.classList.contains('open')) return;
+    const teamId  = currentTeam;
+    const gen     = ++adminAuthGeneration;
+    const isStale = () => gen !== adminAuthGeneration || currentTeam !== teamId;
+    const showError = msg => {
+      adminNote.style.color = 'var(--terracotta)';
+      adminNote.textContent = msg;
+    };
+    setAdminAuthPending(true);
     adminNote.style.color = 'var(--muted)';
     adminNote.textContent = 'Checking…';
+
+    let res, data = null;
     try {
-      const res  = await fetch('/.netlify/functions/check-password', {
+      res = await fetch('/.netlify/functions/check-password', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ team: 'admin', teamName: currentTeam, password })
+        body: JSON.stringify({ team: 'admin', teamName: teamId, password })
       });
-      const data = await res.json();
-      if (data.success) {
-        adminUnlocked = true;
-        sessionStorage.setItem('adminUnlocked', 'true');
-        sessionStorage.setItem('adminPassword', password);
-        closeAdminModal();
-        adminNote.textContent = '';
-        renderAdminAreas();
-        ['tasks', 'eos', 'kpi', 'handover', 'tools'].forEach(t => loadLinks(t));
-      } else {
-        adminNote.style.color = 'var(--terracotta)';
-        adminNote.textContent = 'Incorrect admin password.';
-        adminInput.value = '';
-        adminInput.focus();
-      }
-    } catch {
-      adminNote.style.color = 'var(--terracotta)';
-      adminNote.textContent = 'Could not connect. Please try again.';
+      try { data = await res.json(); } catch { data = null; }
+    } catch (err) {
+      if (isStale()) return;
+      console.error('Admin password check failed:', err);
+      setAdminAuthPending(false);
+      showError('Could not connect. Please try again.');
+      return;
     }
+    if (isStale()) return;                         // cancelled / reopened / locked / switched team
+    setAdminAuthPending(false);
+
+    if (res.status >= 500) {
+      console.error('Admin password check server error:', res.status, data);
+      showError('The server had a problem checking the admin password. Please try again in a moment.');
+      return;
+    }
+
+    const rejected = res.status === 401 || (res.ok && data && data.success === false);
+    if (rejected) {
+      showError('Incorrect admin password.');
+      adminInput.value = '';
+      adminInput.focus();
+      return;
+    }
+
+    if (!res.ok || !data || data.success !== true) {
+      console.error('Unexpected admin password response:', res.status, data);
+      showError('Could not verify the admin password (error ' + res.status + '). Please try again.');
+      return;
+    }
+
+    adminUnlocked = true;
+    sessionStorage.setItem('adminUnlocked', 'true');
+    sessionStorage.setItem('adminPassword', password);
+    closeAdminModal();
+    adminNote.textContent = '';
+    renderAdminAreas();
+    ['tasks', 'eos', 'kpi', 'handover', 'tools'].forEach(t => loadLinks(t));
   }
 
   function lockAdmin() {
+    invalidateAdminAuth();
     adminUnlocked = false;
     sessionStorage.removeItem('adminUnlocked');
     sessionStorage.removeItem('adminPassword');
@@ -1156,6 +1210,7 @@
   }
 
   function closeTeam() {
+    invalidateAdminAuth();
     document.getElementById('team-page').style.display = 'none';
     document.getElementById('workspace-error')?.remove();
     currentTeam   = null;
