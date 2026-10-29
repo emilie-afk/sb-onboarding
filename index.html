@@ -387,6 +387,10 @@
     .goals-card-actions { display: flex; align-items: center; gap: 8px; }
     .drive-link-invalid { color: var(--terracotta); cursor: default; }
     .drive-link-invalid:hover { text-decoration: none; }
+    #session-alert { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 1000; width: min(640px, calc(100% - 32px)); display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; background: #fff4f1; border: 1px solid var(--terracotta); color: var(--forest); box-shadow: var(--shadow-sm); font-size: 13px; line-height: 1.4; }
+    #session-alert .session-alert-text { flex: 1; }
+    #session-alert .session-alert-retry { flex-shrink: 0; border: 1px solid var(--terracotta); background: white; color: var(--terracotta); border-radius: 8px; padding: 6px 12px; font: 600 12px "Manrope", sans-serif; cursor: pointer; }
+    #session-alert .session-alert-retry:disabled { opacity: .6; cursor: default; }
 
     .workspace { width: min(1040px, calc(100% - 40px)); margin: auto; padding: 0 0 80px; }
 
@@ -984,34 +988,122 @@
     return `Too many incorrect attempts. Please wait ${minutes} minute${minutes === 1 ? '' : 's'} and try again.`;
   }
 
+  // ── Session transitions ──────────────────────────────────────
+  // Logins, end-admin, drop-team and logout change the same server session, so
+  // they run one at a time in the order they were started. A later login can
+  // never be undone by an earlier end-admin that was still in flight.
+  let sessionChain = Promise.resolve();
+  function serializeSession(fn) {
+    const run = sessionChain.then(fn, fn);
+    sessionChain = run.catch(() => {});
+    return run;
+  }
+
+  // POSTs a session action. Resolves to { ok, data, reason } — never throws.
+  // ok is true only for a 2xx JSON response with success === true.
+  function postSession(body) {
+    return serializeSession(async () => {
+      let res;
+      try {
+        res = await api('session', { method: 'POST', body });
+      } catch (err) {
+        console.error(`Session ${body.action} failed: network error`);
+        return { ok: false, reason: 'network' };
+      }
+      const data = await readJson(res);
+      if (!res.ok) return { ok: false, reason: 'http ' + res.status, data };
+      if (!data || data.success !== true) return { ok: false, reason: 'unexpected response' };
+      return { ok: true, data };
+    });
+  }
+
+  // Page-level alert for a security action the server did not confirm. It stays
+  // until the action succeeds; it is never shown as success.
+  let sessionAlertRetry = null;
+  let sessionAlertKind  = null;
+  function showSessionAlert(kind, message, retry) {
+    let box = document.getElementById('session-alert');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'session-alert';
+      box.setAttribute('role', 'alert');
+      const text = document.createElement('span');
+      text.className = 'session-alert-text';
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'session-alert-retry';
+      btn.textContent = 'Retry';
+      btn.addEventListener('click', async () => {
+        if (!sessionAlertRetry) return;
+        btn.disabled = true; btn.textContent = 'Retrying…';
+        try { await sessionAlertRetry(); } finally { btn.disabled = false; btn.textContent = 'Retry'; }
+      });
+      box.append(text, btn);
+      document.body.appendChild(box);
+    }
+    box.querySelector('.session-alert-text').textContent = message;
+    box.dataset.kind = kind;
+    sessionAlertKind  = kind;
+    sessionAlertRetry = retry;
+  }
+  // Clears the alert only if it is about `kind` (or any alert after sign-out).
+  function clearSessionAlert(kind) {
+    if (kind && sessionAlertKind !== kind) return;
+    sessionAlertRetry = null;
+    sessionAlertKind  = null;
+    document.getElementById('session-alert')?.remove();
+  }
+
   // Ends team-admin / global-admin access on the server (team access is kept).
+  // Returns true only when the server confirmed it. Local admin controls are
+  // disabled by the callers immediately; this reports whether the server agreed.
+  let adminEndPending = false;
   async function endAdmin(force = false) {
-    if (!force && !auth.globalAdmin && !auth.adminTeams.length) return;
-    try {
-      const res  = await api('session', { method: 'POST', body: { action: 'end-admin' } });
-      const data = await readJson(res);
-      if (res.ok && data) applySession(data);
-    } catch (err) {
-      console.error('Ending admin access failed:', err);
+    if (!force && !adminEndPending && !auth.globalAdmin && !auth.adminTeams.length) return true;
+    adminEndPending = true;
+    renderAdminAreas();
+    const r = await postSession({ action: 'end-admin' });
+    adminEndPending = false;
+    if (r.ok) {
+      applySession(r.data);
+      clearSessionAlert('admin');
+    } else {
+      showSessionAlert('admin',
+        'Admin access could not be ended on the server (' + r.reason + '). Admin changes are disabled on this page, ' +
+        'but the server may still accept admin access from this browser for up to 2 hours. Retry to end it now.',
+        () => endAdmin(true));
     }
+    renderAdminAreas();
+    return r.ok;
   }
 
+  // Removes one team's access (a login the user cancelled but the server granted).
   async function dropTeam(team) {
-    try {
-      const res  = await api('session', { method: 'POST', body: { action: 'drop-team', team } });
-      const data = await readJson(res);
-      if (res.ok && data) applySession(data);
-    } catch (err) {
-      console.error('Dropping team access failed:', err);
+    const r = await postSession({ action: 'drop-team', team });
+    if (r.ok) {
+      applySession(r.data);
+      clearSessionAlert('drop-' + team);
+      return true;
     }
+    const name = (TEAMS[team] && TEAMS[team].name) || team;
+    showSessionAlert('drop-' + team,
+      'The cancelled ' + name + ' sign-in could not be removed on the server (' + r.reason + '). ' +
+      'This browser may still have access to that team. Retry to remove it.',
+      () => dropTeam(team));
+    return false;
   }
 
+  // Signs out only when the server confirms; otherwise nothing is hidden or
+  // reported as signed out, and the person can retry.
   async function signOut() {
-    let ok = false;
-    try {
-      const res = await api('session', { method: 'POST', body: { action: 'logout' } });
-      ok = res.ok;
-    } catch {}
+    const r = await postSession({ action: 'logout' });
+    if (!r.ok) {
+      showSessionAlert('logout',
+        'Sign-out was not confirmed by the server (' + r.reason + '). You may still be signed in on this browser. Retry to sign out.',
+        signOut);
+      return false;
+    }
+    clearSessionAlert();
     applySession(null);
     adminUnlocked = false;
     invalidateAuth();
@@ -1025,7 +1117,7 @@
       loadGoals();
     }
     loadHandbook();
-    if (!ok) alert('Could not reach the server to sign out. Please try again, or close the browser to end the session.');
+    return true;
   }
 
   // Called when the server reports that the session is missing or expired.
@@ -1118,7 +1210,7 @@
     // Step 1: authentication (network / server errors only)
     let res, data = null;
     try {
-      res  = await api('check-password', { method: 'POST', body: { team: teamId, password } });
+      res  = await serializeSession(() => api('check-password', { method: 'POST', body: { team: teamId, password } }));
       data = await readJson(res);
     } catch (err) {
       if (isStale()) return;
@@ -1192,6 +1284,7 @@
   }
 
   function showAdminModal() {
+    if (adminEndPending) return;          // wait until ending admin access has finished
     invalidateAdminAuth();
     adminInput.value = '';
     adminNote.textContent = '';
@@ -1231,7 +1324,7 @@
 
     let res, data = null;
     try {
-      res  = await api('check-password', { method: 'POST', body: { team: 'admin', teamName: teamId, password } });
+      res  = await serializeSession(() => api('check-password', { method: 'POST', body: { team: 'admin', teamName: teamId, password } }));
       data = await readJson(res);
     } catch (err) {
       if (isStale()) return;
@@ -1270,6 +1363,7 @@
     }
 
     applySession(data.session);
+    clearSessionAlert('admin');           // admin access is intentionally active again
     adminUnlocked = true;
     closeAdminModal();
     adminNote.textContent = '';
@@ -1277,12 +1371,14 @@
     ['tasks', 'eos', 'kpi', 'handover', 'tools'].forEach(t => loadLinks(t));
   }
 
-  function lockAdmin() {
+  // Admin controls are disabled at once; endAdmin() reports whether the server
+  // confirmed it and shows a retry alert if not.
+  async function lockAdmin() {
     invalidateAdminAuth();
     adminUnlocked = false;
     renderAdminAreas();
-    endAdmin();
     ['tasks', 'eos', 'kpi', 'handover', 'tools'].forEach(t => loadLinks(t));
+    return endAdmin(true);
   }
 
   function renderAdminAreas() {
@@ -1293,6 +1389,9 @@
       if (adminUnlocked) {
         addForm.style.display   = 'block';
         adminArea.innerHTML = `<div class="admin-badge">🔧 Admin mode active <button onclick="lockAdmin()">Lock</button></div>`;
+      } else if (adminEndPending) {
+        addForm.style.display   = 'none';
+        adminArea.innerHTML = `<button class="admin-unlock-btn" disabled aria-busy="true">Ending admin access…</button>`;
       } else {
         addForm.style.display   = 'none';
         adminArea.innerHTML = `<button class="admin-unlock-btn" onclick="showAdminModal()">🔒 Manage files</button>`;
@@ -1750,13 +1849,13 @@
     if (!pw) return false;
     let res, data;
     try {
-      res  = await api('check-password', { method: 'POST', body: { team: 'admin', scope: 'global', password: pw } });
+      res  = await serializeSession(() => api('check-password', { method: 'POST', body: { team: 'admin', scope: 'global', password: pw } }));
       data = await readJson(res);
     } catch {
       alert('Could not connect. Please try again.');
       return false;
     }
-    if (res.ok && data && data.success === true) { applySession(data.session); return auth.globalAdmin; }
+    if (res.ok && data && data.success === true) { applySession(data.session); clearSessionAlert('admin'); return auth.globalAdmin; }
     if (res.status === 429) alert(tooManyMessage(data));
     else if (res.status === 401) alert('Incorrect admin password.');
     else alert('Could not verify the admin password (error ' + res.status + '). Please try again.');
