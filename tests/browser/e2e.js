@@ -293,6 +293,181 @@ const tab = async (page, t) => { await page.click(`.tab-nav button[onclick*="'${
       ok('Login limit: friendly too-many-attempts message', (await text(page, '#form-note')).includes('Too many incorrect attempts'));
       await ctx.close(); }
 
+    // 10. Revocation failures are visible, retryable, and never shown as success
+    {
+      // fault: { action, mode: 'abort'|'500'|'delay', ms }  — applies to session POSTs
+      async function faultyPage() {
+        const P = await newPage(browser);
+        P.fault = null;
+        await P.page.route('**/.netlify/functions/session', async route => {
+          const req = route.request();
+          let action = null;
+          try { action = JSON.parse(req.postData() || '{}').action; } catch {}
+          const f = P.fault;
+          if (req.method() === 'POST' && f && f.action === action) {
+            if (f.mode === 'abort') return route.abort('failed');
+            if (f.mode === '500') return route.fulfill({ status: 500, contentType: 'application/json', body: '{"success":false,"error":"server_error"}' });
+            if (f.mode === 'html') return route.fulfill({ status: 200, contentType: 'text/html', body: '<html>proxy page</html>' });
+            if (f.mode === 'delay') { await new Promise(r => setTimeout(r, f.ms)); }
+          }
+          return route.continue();
+        });
+        return P;
+      }
+      const rawCookie = async ctx => ((await ctx.cookies()).find(c => c.name === '__Host-sbonb') || {}).value;
+      // Authorized replays get 409 (stale version, nothing written); revoked ones 401.
+      const replayAdmin = (cookie, team) => fetch(BASE + '/.netlify/functions/manage-links', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-sb-onboarding': '1', origin: BASE, cookie: '__Host-sbonb=' + cookie },
+        body: JSON.stringify({ action: 'add', team, type: 'tasks', version: 'stale-version', link: { url: 'https://example.com/replay' } }),
+      }).then(r => r.status);
+      const replayRead = (cookie, team) => fetch(BASE + `/.netlify/functions/get-links?team=${team}&type=tasks`, { headers: { cookie: '__Host-sbonb=' + cookie } }).then(r => r.status);
+      const alertText = page => page.evaluate(() => document.getElementById('session-alert')?.textContent || '');
+      const retry = async page => { await page.click('#session-alert .session-alert-retry'); await page.waitForTimeout(350); };
+      const serverSession = page => page.evaluate(async () => (await fetch('/.netlify/functions/session')).json());
+
+      for (const mode of ['abort', '500']) {
+        seed();
+        const P = await faultyPage(); const { page, ctx } = P;
+        await page.goto(BASE + '/#teams');
+        await teamLogin(page, 'Design', TEST_ENV.PASSWORD_DESIGN);
+        await adminLogin(page, TEST_ENV.PASSWORD_ADMIN_DESIGN);
+        const adminCookie = await rawCookie(ctx);
+        P.fault = { action: 'end-admin', mode };
+        await page.click('#tasks-admin-area .admin-badge button'); await page.waitForTimeout(350);
+        const msg = await alertText(page);
+        ok(`Lock (${mode}): failure is visible, not shown as locked on the server`, msg.includes('could not be ended on the server') && msg.includes('Retry'), msg.slice(0, 80));
+        ok(`Lock (${mode}): local admin controls disabled`, !(await visible(page, '#tasks-add-form')) && (await text(page, '#tasks-admin-area')).includes('Manage files'));
+        ok(`Lock (${mode}): server really still has admin (so the alert is truthful)`, (await replayAdmin(adminCookie, 'design')) === 409);
+        P.fault = null;
+        await retry(page);
+        ok(`Lock (${mode}): retry succeeds and clears the alert`, (await alertText(page)) === '');
+        ok(`Lock (${mode}): replaying the original cookie is rejected after confirmed success`, (await replayAdmin(adminCookie, 'design')) === 401);
+        const s = await serverSession(page);
+        ok(`Lock (${mode}): team access kept`, s.teams.includes('design') && s.adminTeams.length === 0);
+        await ctx.close();
+      }
+
+      // Malformed (non-JSON) success-looking response is a failure too
+      seed();
+      { const P = await faultyPage(); const { page, ctx } = P;
+        await page.goto(BASE + '/#teams');
+        await teamLogin(page, 'Design', TEST_ENV.PASSWORD_DESIGN);
+        await adminLogin(page, TEST_ENV.PASSWORD_ADMIN_DESIGN);
+        P.fault = { action: 'end-admin', mode: 'html' };
+        await page.click('#tasks-admin-area .admin-badge button'); await page.waitForTimeout(350);
+        ok('Lock (malformed 200): treated as failure', (await alertText(page)).includes('unexpected response'));
+        await ctx.close(); }
+
+      // Pending: admin re-authentication is blocked until the server answers
+      seed();
+      { const P = await faultyPage(); const { page, ctx } = P;
+        await page.goto(BASE + '/#teams');
+        await teamLogin(page, 'Design', TEST_ENV.PASSWORD_DESIGN);
+        await adminLogin(page, TEST_ENV.PASSWORD_ADMIN_DESIGN);
+        P.fault = { action: 'end-admin', mode: 'delay', ms: 800 };
+        await page.click('#tasks-admin-area .admin-badge button'); await page.waitForTimeout(150);
+        const pending = await page.evaluate(() => { const b = document.querySelector('#tasks-admin-area button'); return { t: b.textContent, d: b.disabled }; });
+        ok('Pending: "Ending admin access…" shown and re-auth disabled', pending.d && pending.t.includes('Ending admin access'), JSON.stringify(pending));
+        await page.waitForTimeout(900);
+        ok('Pending: completes, Manage files available, no alert', (await text(page, '#tasks-admin-area')).includes('Manage files') && (await alertText(page)) === '');
+        await ctx.close(); }
+
+      // Leaving the workspace with a failed end-admin
+      seed();
+      { const P = await faultyPage(); const { page, ctx } = P;
+        await page.goto(BASE + '/#teams');
+        await teamLogin(page, 'SEO', TEST_ENV.PASSWORD_SEO);
+        await adminLogin(page, TEST_ENV.PASSWORD_ADMIN_SEO);
+        const adminCookie = await rawCookie(ctx);
+        P.fault = { action: 'end-admin', mode: '500' };
+        await page.click('.team-back'); await page.waitForTimeout(350);
+        ok('Leave workspace (500): alert visible on the Teams page', (await alertText(page)).includes('could not be ended'));
+        P.fault = null; await retry(page);
+        ok('Leave workspace: retry ends admin; original cookie rejected', (await alertText(page)) === '' && (await replayAdmin(adminCookie, 'seo')) === 401);
+        await ctx.close(); }
+
+      // Goals: cancel and completed save with a failed end-admin
+      seed();
+      { const P = await faultyPage(); const { page, ctx } = P;
+        await page.goto(BASE + '/#teams');
+        await teamLogin(page, 'Video', TEST_ENV.PASSWORD_VIDEO);
+        await page.click('.team-back'); await page.waitForTimeout(300);
+        page.__promptAnswer = TEST_ENV.PASSWORD_ADMIN;
+        await page.click('[data-goal-action="edit"][data-goal-year="2026"]'); await page.waitForTimeout(300);
+        let globalCookie = await rawCookie(ctx);
+        P.fault = { action: 'end-admin', mode: 'abort' };
+        await page.click('#goals-edit-form .goals-cancel-btn'); await page.waitForTimeout(350);
+        ok('Goals cancel (network): alert visible', (await alertText(page)).includes('could not be ended'));
+        ok('Goals cancel: server still global admin before retry (truthful)', (await replayAdmin(globalCookie, 'marketing')) === 409);
+        P.fault = null; await retry(page);
+        ok('Goals cancel: retry ends global admin; original cookie rejected', (await alertText(page)) === '' && (await replayAdmin(globalCookie, 'marketing')) === 401 && !(await serverSession(page)).globalAdmin);
+
+        await page.click('[data-goal-action="edit"][data-goal-year="2026"]'); await page.waitForTimeout(300);
+        globalCookie = await rawCookie(ctx);
+        P.fault = { action: 'end-admin', mode: '500' };
+        await page.fill('#goal-year-input', '$3,000'); await page.click('#goals-edit-form .goals-save-btn'); await page.waitForTimeout(400);
+        ok('Goals save: change saved', factory('team-links').peek('global_goals')['2026'].yearGoal === '$3,000');
+        ok('Goals save (500 on end-admin): alert visible', (await alertText(page)).includes('could not be ended'));
+        P.fault = null; await retry(page);
+        ok('Goals save: retry ends global admin; original cookie rejected', (await alertText(page)) === '' && (await replayAdmin(globalCookie, 'marketing')) === 401);
+        await ctx.close(); }
+
+      // Late login cleanup: cancelled login whose success arrives later, drop-team fails
+      seed();
+      { const P = await faultyPage(); const { page, ctx } = P;
+        await page.route('**/.netlify/functions/check-password', async route => { await new Promise(r => setTimeout(r, 500)); return route.continue(); });
+        await page.goto(BASE + '/#teams');
+        await page.click('.team-card:has(h3:text-is("Marketing"))');
+        await page.fill('#team-password', TEST_ENV.PASSWORD_MARKETING);
+        P.fault = { action: 'drop-team', mode: '500' };
+        await page.click('#unlock-btn'); await page.waitForTimeout(100);
+        await page.click('#cancel-modal');
+        await page.waitForTimeout(900);
+        const lateCookie = await rawCookie(ctx);
+        ok('Late login cleanup (500): alert names the cancelled team', (await alertText(page)).includes('cancelled Marketing sign-in could not be removed'));
+        ok('Late login cleanup: server still grants it before retry (truthful)', (await replayRead(lateCookie, 'marketing')) === 200);
+        P.fault = null; await retry(page);
+        ok('Late login cleanup: retry removes it; old cookie rejected', (await alertText(page)) === '' && (await replayRead(lateCookie, 'marketing')) === 401 && !(await serverSession(page)).authenticated);
+        await ctx.close(); }
+
+      // Late admin login cleanup with a failed end-admin
+      seed();
+      { const P = await faultyPage(); const { page, ctx } = P;
+        await page.goto(BASE + '/#teams');
+        await teamLogin(page, 'Design', TEST_ENV.PASSWORD_DESIGN);
+        await page.route('**/.netlify/functions/check-password', async route => { await new Promise(r => setTimeout(r, 500)); return route.continue(); });
+        await page.click('#tasks-admin-area .admin-unlock-btn');
+        await page.fill('#admin-input', TEST_ENV.PASSWORD_ADMIN_DESIGN);
+        P.fault = { action: 'end-admin', mode: 'abort' };
+        await page.click('#admin-unlock-btn'); await page.waitForTimeout(100);
+        await page.click('#cancel-admin');
+        await page.waitForTimeout(900);
+        const c = await rawCookie(ctx);
+        ok('Late admin cleanup (network): alert visible, admin not shown active', (await alertText(page)).includes('could not be ended') && !(await visible(page, '#tasks-add-form')));
+        P.fault = null; await retry(page);
+        ok('Late admin cleanup: retry ends admin; cookie rejected for admin', (await replayAdmin(c, 'design')) === 401 && (await alertText(page)) === '');
+        await ctx.close(); }
+
+      // Sign-out failure is not presented as signed out
+      seed();
+      { const P = await faultyPage(); const { page, ctx } = P;
+        await page.goto(BASE + '/#teams');
+        await teamLogin(page, 'Marketing', TEST_ENV.PASSWORD_MARKETING);
+        const c = await rawCookie(ctx);
+        P.fault = { action: 'logout', mode: 'abort' };
+        await page.click('#team-signout-btn'); await page.waitForTimeout(350);
+        const msg = await alertText(page);
+        ok('Sign-out (network): "not confirmed" alert with retry, no "close the browser" claim', msg.includes('Sign-out was not confirmed') && !/close the browser/i.test(msg));
+        ok('Sign-out (network): page not shown as signed out', await visible(page, '#team-page'));
+        P.fault = { action: 'logout', mode: '500' };
+        await retry(page);
+        ok('Sign-out (500): still not confirmed', (await alertText(page)).includes('http 500'));
+        P.fault = null; await retry(page);
+        ok('Sign-out: retry signs out; old cookie rejected', (await alertText(page)) === '' && !(await visible(page, '#team-page')) && (await replayRead(c, 'marketing')) === 401);
+        await ctx.close(); }
+    }
+
     // 9. Mobile
     seed();
     { const { ctx, page, errors } = await newPage(browser, { mobile: true });

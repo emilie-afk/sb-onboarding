@@ -3,12 +3,13 @@
 //   revoked/<sid>          – sessions ended by logout / admin lock (kept until expiry)
 //   rl/<scope>/<addrHash>  – failed login attempts per client address and scope
 //   rl/<scope>/_all        – failed login attempts per scope from all addresses
-// Nothing here relies on function process memory. If the store cannot be read or
+// Every read is strongly consistent (see storage.js), so a revocation is
+// effective on the very next request. Nothing here relies on function process memory. If the store cannot be read or
 // updated, callers fail closed (login refused, session treated as invalid).
 
 const crypto = require('crypto');
 const { SECURITY_STORE } = require('./config');
-const { openStore, readVersioned, writeIfVersion } = require('./storage');
+const { openStore, readStrong, readVersioned, writeIfVersion } = require('./storage');
 
 const WINDOW_SECONDS = 15 * 60;
 const MAX_FAILURES_PER_ADDRESS = 10;
@@ -25,7 +26,7 @@ class SecurityStore {
 
   // ── Revocation ──
   async isRevoked(sid) {
-    const data = await this.store.get(`revoked/${sid}`, { type: 'json' });
+    const data = await readStrong(this.store, `revoked/${sid}`);
     return !!data;
   }
 

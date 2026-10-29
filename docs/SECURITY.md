@@ -40,8 +40,17 @@ access.
 | Content | `base64url(JSON)` + HMAC-SHA256 signature with `SESSION_SECRET` |
 | Grants | `{team, member|admin, password-fingerprint, expiry}` or `{global, fingerprint, expiry}` |
 | Lifetime | member grants 12 h, team-admin and global-admin grants 2 h (checked by the server on every request) |
-| Logout | `POST session {action:"logout"}` stores the session id in `onboarding-security/revoked/<sid>`; a copied cookie stops working |
+| Logout | `POST session {action:"logout"}` stores the session id in `onboarding-security/revoked/<sid>`; a copied cookie stops working on the next request (revocations are read with strong consistency) |
 | Restore | `GET session` returns the verified teams/admin scope only |
+
+**Revocation is only real once the server confirms it.** Logout, lock admin,
+leaving the workspace, finishing or cancelling a goals edit, and cleanup of a
+cancelled login all wait for the server. Admin controls are disabled on the page
+immediately, but if the server request fails (network error, HTTP error or a
+malformed response) a page-level alert says the access could **not** be ended
+and offers **Retry**; it never reports success. Sign-out leaves the page as-is
+until the server confirms. All session-changing requests run one at a time, so a
+new login cannot be undone by an older request still in flight.
 
 Passwords are never returned, never stored in the browser and never placed in
 the cookie. Old `sessionStorage` keys (`unlockedTeams`, `adminUnlocked`,
@@ -102,7 +111,7 @@ Mark every value as **secret**, scope to **Functions**, and set values for the
 | `PASSWORD_ADMIN` | existing | `<global admin password>` (unchanged) |
 | `SITE_ID` | existing (token mode) | `<netlify site id>` |
 | `NETLIFY_API_TOKEN` | existing (token mode) | `<personal access token>` — see §5 |
-| `BLOBS_ACCESS` | optional | `token` (default) or `context` |
+| `BLOBS_ACCESS` | optional | `token` (default and only supported value). `context` is refused (503) — see §3 |
 | `SESSION_NOT_BEFORE` | optional | `<ISO date-time>` |
 | `APP_ORIGINS` | recommended | `https://<production-domain>` (comma-separated if several) |
 | `LINK_ALLOWED_HOSTS` | optional | e.g. `docs.google.com,drive.google.com,<team tool hosts>`; leading `.` allows subdomains. Empty = any public https host |
@@ -123,6 +132,16 @@ Unchanged shapes; the only new key is `global_handbook`.
 | `global_handbook` (new) | `[{ id, name, url }]` |
 
 Teams: `marketing, customerservice, seo, design, video`.
+
+**Consistency.** Revocations, login-failure counters and link versions are read
+with **strong consistency**: the store is opened with `consistency: 'strong'`
+and every read requests it; token mode talks to the Netlify API, which is
+strongly consistent. `BLOBS_ACCESS=context` is deliberately unsupported and fails
+closed: these Lambda-compatible functions only receive Netlify's cached edge
+endpoint (no strong-read URL), so a signed-out cookie could keep working until
+the cache caught up. There is no fallback to eventual reads. Re-enabling
+context access requires migrating to functions that receive a strong-read
+endpoint, new tests and a deploy-preview check.
 
 Writes are versioned: `get-links` returns a `version` (etag); `manage-links`
 requires it and uses conditional writes (`onlyIfMatch` / `onlyIfNew`). A stale
@@ -202,8 +221,8 @@ confirming nobody is editing. Do not bulk-restore over newer edits.
 npm install && (cd netlify/functions && npm install)
 npm test                 # unit/integration tests, synthetic credentials
 npm run build            # dist/ + public-content check
-npx playwright --version # Chromium needed for browser checks
-npm run test:browser     # end-to-end + UI regression checks
+npx playwright install chromium   # once: browser for the pinned Playwright 1.63.0
+npm run test:browser     # end-to-end (incl. revocation-failure checks) + UI regression
 SESSION_SECRET=<synthetic> PASSWORD_MARKETING=<synthetic> … npm run dev
 ```
 
@@ -231,11 +250,10 @@ The dev server and tests use an in-memory store and never touch production.
    unauthenticated `get-links`, unlimited `check-password` and
    password-in-body `manage-links` against the same store with the token it was
    built with.* Deploying the fix does not close them. Do one of:
-   - **Preferred:** create a new `NETLIFY_API_TOKEN`, set it for Production,
+   - **Required:** create a new `NETLIFY_API_TOKEN`, set it for Production,
      redeploy, verify (step 7), then **revoke the old token** in Netlify user
-     settings — old deploys lose storage access; or switch to
-     `BLOBS_ACCESS=context` after verifying on a deploy preview, then revoke the
-     token entirely.
+     settings — old deploys lose storage access. (Context access is not an
+     option for these functions; see §3.)
    - Also delete old deploys / branch deploys you no longer need (Deploys →
      deploy → Delete) and check that no branch deploys of old code are enabled.
    After this step, verify an old permalink's `/.netlify/functions/get-links?team=marketing&type=tasks` no longer returns data.
@@ -257,8 +275,16 @@ The dev server and tests use an in-memory store and never touch production.
 - **Never** roll back to a deploy whose `get-links` has no authentication (any
   deploy before this change) — that republishes all team links anonymously.
 - Data is never migrated destructively: the only added key is
-  `global_handbook`; the `onboarding-security` store can be deleted at any time
-  (users just log in again).
+  `global_handbook`.
+- **Do not delete or clear the `onboarding-security` store** as a rollback or
+  logout step. Sessions live in signed cookies, not in that store; it holds the
+  revocations and login limits. Deleting it makes previously signed-out or
+  admin-ended cookies valid again until they expire and resets the login limits.
+  To end sessions use §1 (password change, `SESSION_NOT_BEFORE`, or rotating
+  `SESSION_SECRET`). If the security state must ever be cleared, first rotate
+  `SESSION_SECRET` and redeploy **every** active entry point running this code
+  (production and any branch/preview deploys with the secret), confirm old
+  cookies return 401, and only then clear it.
 - If a bad write happened, restore that single key from the backup (§5).
 
 ## 7. Git history cleanup (separate, not executed)
@@ -297,8 +323,9 @@ URL.
   it is changed; sessions can be ended by password change, `SESSION_NOT_BEFORE`
   or secret rotation (see §1).
 - Per-scope login limits can be abused to delay a team's logins for 15 minutes.
-- Token mode uses a personal access token with broad account scope; `context`
-  mode reduces this but must be verified first (§6 step 6).
+- Token mode uses a personal access token with broad account scope. Reducing
+  that scope needs a strong-consistency alternative first (§3); until then,
+  restrict who can read the token and rotate it as in §6 step 6.
 - Old deploys and fork deploy previews (§6 steps 2 and 6) until closed.
 - `script-src 'unsafe-inline'` stays in the CSP because the existing page uses
   inline handlers; stored content is never inserted as HTML.
