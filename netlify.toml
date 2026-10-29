@@ -1,6 +1,9 @@
 [build]
+  # Only index.html and the logo are published (copied into dist/ by the build).
+  # The build fails if a real internal document link is committed (check:public).
+  publish   = "dist"
   functions = "netlify/functions"
-  command   = "npm install && cd netlify/functions && npm install"
+  command   = "npm install && npm run check:public && npm run build && cd netlify/functions && npm install"
 
 [functions]
   node_bundler = "esbuild"
@@ -11,3 +14,8 @@
   [headers.values]
     X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "same-origin"
+    X-Robots-Tag = "noindex, nofollow"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=()"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+
