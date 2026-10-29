@@ -1,54 +1,45 @@
-// get-links.js
-// Returns saved file links for a team + type.
-// No auth required — the UI already gates access behind the team password.
+// get-links.js — returns stored links / goals for ONE authorized team + type.
 //
-// Query params: ?team=marketing&type=eos
-//   type: tasks | eos | kpi | handover | tools | goals
+// Requires a valid signed session (cookie). The team and type in the query are
+// only a selection: access is decided from the verified session grants.
 //
-// Response for tasks/eos/handover/tools (flat array):
-//   { links: [{ id, name, url }, ...] }
+// GET ?team=<team>&type=tasks|eos|kpi|handover|tools   (member/admin of <team>, or global admin)
+// GET ?team=global&type=goals|handbook                 (any signed-in team member or admin)
 //
-// Response for kpi (year-keyed object):
-//   { links: { "2026": [{ id, name, url }, ...] } }
+// Response: { links, version }
+//   tasks/eos/handover/tools/handbook: [{ id, name, url }, ...]
+//   kpi:   { "2026": [{ id, name, url }, ...] }
+//   goals: { "2026": { yearGoal, quarterGoal, monthlyGoals, brandGoals, channelGoals } }
+// `version` is the storage version used for edit-conflict detection.
 
-const { getStore } = require('@netlify/blobs');
+const { TEAM_TYPES, GLOBAL_TYPES, LINK_STORE, isTeam } = require('../lib/config');
+const { json, errorResponse } = require('../lib/http');
+const { canReadTeam, canReadGlobal } = require('../lib/session');
+const { authenticate } = require('../lib/auth');
+const { openStore, readVersioned } = require('../lib/storage');
 
 exports.handler = async function (event) {
-  const { team, type } = event.queryStringParameters || {};
-
-  if (!team || !type) {
-    return { statusCode: 400, body: JSON.stringify({ error: 'Missing team or type' }) };
+  if (event.httpMethod !== 'GET') {
+    return json(405, { error: 'method_not_allowed' }, { headers: { Allow: 'GET' } });
   }
-
-  // ── Get store with explicit credentials ──
-  const siteID = process.env.SITE_ID;
-  const token  = process.env.NETLIFY_API_TOKEN;
-
-  if (!siteID || !token) {
-    console.error('get-links: missing SITE_ID or NETLIFY_API_TOKEN env vars');
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: 'Server misconfiguration: missing SITE_ID or NETLIFY_API_TOKEN' })
-    };
-  }
-
   try {
-    const store = getStore({ name: 'team-links', siteID, token });
-    const key   = `${team}_${type}`;
-    const data  = await store.get(key, { type: 'json' });
+    const { team, type } = event.queryStringParameters || {};
+    const isGlobal = team === 'global';
+    const validTarget = isGlobal ? GLOBAL_TYPES.includes(type) : isTeam(team) && TEAM_TYPES.includes(type);
 
-    // Default: kpi → {}, goals → { yearGoal:'', quarterGoal:'' }, others → []
-    const fallback = (type === 'kpi' || type === 'goals') ? {} : [];
-    return {
-      statusCode: 200,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ links: data ?? fallback }),
-    };
+    // Authenticate before revealing anything about the request.
+    const { session } = await authenticate(event);
+    if (!session) return json(401, { error: 'unauthenticated' });
+    if (!validTarget) return json(400, { error: 'invalid_request' });
+
+    const allowed = isGlobal ? canReadGlobal(session) : canReadTeam(session, team);
+    if (!allowed) return json(403, { error: 'forbidden' });
+
+    const store = openStore(LINK_STORE, event);
+    const { data, version } = await readVersioned(store, `${team}_${type}`);
+    const fallback = type === 'kpi' || type === 'goals' ? {} : [];
+    return json(200, { links: data ?? fallback, version });
   } catch (err) {
-    console.error('get-links error:', err.message || err);
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: 'Failed to load links', detail: err.message }),
-    };
+    return errorResponse(err, 'get-links');
   }
 };

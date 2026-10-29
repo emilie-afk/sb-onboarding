@@ -1,0 +1,8 @@
+node_modules/
+dist/
+private/
+.netlify/
+.env
+.env.*
+*.backup.json
+test-results/

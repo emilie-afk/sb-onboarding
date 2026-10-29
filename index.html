@@ -381,6 +381,12 @@
 
     .team-back { display: inline-flex; align-items: center; gap: 6px; padding: 14px 20px 0; border: 0; background: none; cursor: pointer; color: var(--muted); font: 600 13px "Manrope", sans-serif; transition: .2s; }
     .team-back:hover { color: var(--accent-dark); }
+    .team-page-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .team-signout { padding: 14px 20px 0; border: 0; background: none; cursor: pointer; color: var(--muted); font: 600 13px "Manrope", sans-serif; transition: .2s; }
+    .team-signout:hover { color: var(--terracotta); }
+    .goals-card-actions { display: flex; align-items: center; gap: 8px; }
+    .drive-link-invalid { color: var(--terracotta); cursor: default; }
+    .drive-link-invalid:hover { text-decoration: none; }
 
     .workspace { width: min(1040px, calc(100% - 40px)); margin: auto; padding: 0 0 80px; }
 
@@ -585,11 +591,9 @@
     <section class="page" id="handbook">
       <div class="page-hero"><div class="icon">⌁</div><h1>Employee handbook</h1><p>Policies, benefits, and the everyday details that help our team work well together.</p></div>
       <div class="content">
-        <a class="handbook-card" href="https://docs.google.com/document/d/1GJPhm1GmrOvQ5lsR5JxdsjCx3bAhH3Kx5AOsEHCjhTA/edit?tab=t.0" target="_blank" rel="noopener noreferrer">
-          <span class="feature-icon">📄</span>
-          <span><h3>Open Employee Handbook</h3><p>Opens in Google Docs · Use your company Google account</p></span>
-          <span class="arrow">↗</span>
-        </a>
+        <div id="handbook-links">
+          <p class="links-loading">🔒 Unlock your team section on the <a class="inline-link" href="#teams" data-page="teams">My team</a> page to open the employee handbook.</p>
+        </div>
         <div class="note"><strong>Full-time team members:</strong> The benefits below apply to full-time employees. Interns are not eligible.</div>
         <h2 class="subhead">Benefits at a glance</h2>
         <article class="feature-card"><span class="feature-icon">🏖</span><div><h3>Paid leave</h3><p>After 12 months, receive 12 paid leave days per year. Before that, earn one day for each month worked. Up to five unused days may carry over.</p></div></article>
@@ -646,7 +650,10 @@
         <div class="goals-card">
           <div class="goals-card-header">
             <h3 class="goals-card-title">🎯 Revenue Goals</h3>
-            <button class="goals-edit-top-btn" id="goals-edit-btn" onclick="editGoals()">✏ Edit</button>
+            <div class="goals-card-actions">
+              <button class="goals-edit-top-btn" id="goals-edit-btn" onclick="editGoals()">✏ Edit</button>
+              <button class="goals-edit-top-btn" id="goals-signout-btn" onclick="signOut()">Sign out</button>
+            </div>
           </div>
           <p id="goals-locked" style="display:block;">🔒 Unlock your team section to view revenue goals.</p>
           <div id="goals-display" style="display:none;">
@@ -702,7 +709,10 @@
 
   <!-- TEAM WORKSPACE (shown after unlock, not part of pages array) -->
   <div id="team-page">
-    <button class="team-back" onclick="closeTeam()">← Back to Teams</button>
+    <div class="team-page-bar">
+      <button class="team-back" onclick="closeTeam()">← Back to Teams</button>
+      <button class="team-signout" id="team-signout-btn" onclick="signOut()">Sign out</button>
+    </div>
     <div class="page-hero">
       <div class="icon" id="team-emoji" style="font-size:26px;width:54px;height:54px;"></div>
       <h1 id="team-name-heading"></h1>
@@ -892,6 +902,7 @@
     history.replaceState(null, '', '#' + id);
     window.scrollTo({ top: 0, behavior: 'smooth' });
     if (id === 'teams') loadGoals();
+    if (id === 'handbook') loadHandbook();
   }
 
   document.addEventListener('click', event => {
@@ -908,14 +919,122 @@
     showPage(trigger.dataset.page);
   });
 
-  // ── State ────────────────────────────────────────────────────
-  let currentTeam   = null;
-  let adminUnlocked = sessionStorage.getItem('adminUnlocked') === 'true';
-  let unlockedTeams = JSON.parse(sessionStorage.getItem('unlockedTeams') || '[]');
-  let allGoalsData  = {};
-  let currentEditYear = null;
+  // ── API ──────────────────────────────────────────────────────
+  // Authentication lives in a signed, HttpOnly session cookie set by the server.
+  // Nothing in the browser (storage, variables, hidden elements) grants access:
+  // every request is authorized by the server from the verified session.
+  const API_BASE = '/.netlify/functions/';
+  function api(name, { method = 'GET', body, query } = {}) {
+    const url = API_BASE + name + (query ? '?' + new URLSearchParams(query).toString() : '');
+    const opts = { method, credentials: 'same-origin', cache: 'no-store', headers: {} };
+    if (body !== undefined) {
+      opts.headers['Content-Type'] = 'application/json';
+      opts.headers['X-SB-Onboarding'] = '1';   // CSRF protection header
+      opts.body = JSON.stringify(body);
+    }
+    return fetch(url, opts);
+  }
+  async function readJson(res) { try { return await res.json(); } catch { return null; } }
 
-  window.addEventListener('DOMContentLoaded', () => loadGoals());
+  // ── State ────────────────────────────────────────────────────
+  // Remove browser-only auth state written by older versions of this page
+  // (it never granted server access, and stored admin passwords in the browser).
+  ['unlockedTeams', 'adminUnlocked', 'adminPassword', 'goalsAdminPw'].forEach(key => {
+    try { sessionStorage.removeItem(key); } catch {}
+    try { localStorage.removeItem(key); } catch {}
+  });
+
+  let currentTeam   = null;
+  let auth          = { authenticated: false, teams: [], adminTeams: [], globalAdmin: false };
+  let unlockedTeams = [];      // display only — mirrors the server session
+  let adminUnlocked = false;   // admin mode shown in the open workspace (display only)
+  let allGoalsData  = {};
+  let goalsVersion  = '';
+  let currentEditYear = null;
+  const linkVersions = {};     // `${team}:${type}` → storage version for conflict checks
+  const linkCache    = {};     // `${team}:${type}` → last rendered data
+
+  function applySession(s) {
+    auth = s && s.authenticated
+      ? { authenticated: true, teams: s.teams || [], adminTeams: s.adminTeams || [], globalAdmin: !!s.globalAdmin }
+      : { authenticated: false, teams: [], adminTeams: [], globalAdmin: false };
+    unlockedTeams = [...auth.teams];
+    const signout = document.getElementById('goals-signout-btn');
+    if (signout) signout.style.display = auth.authenticated ? 'flex' : 'none';
+  }
+
+  function canManageCurrent() {
+    return !!currentTeam && (auth.globalAdmin || auth.adminTeams.includes(currentTeam));
+  }
+
+  async function restoreSession() {
+    try {
+      const res = await api('session');
+      applySession(res.ok ? await readJson(res) : null);
+    } catch {
+      applySession(null);
+    }
+    loadGoals();
+    loadHandbook();
+  }
+  window.addEventListener('DOMContentLoaded', restoreSession);
+
+  function tooManyMessage(data) {
+    const minutes = Math.max(1, Math.ceil(((data && data.retryAfter) || 900) / 60));
+    return `Too many incorrect attempts. Please wait ${minutes} minute${minutes === 1 ? '' : 's'} and try again.`;
+  }
+
+  // Ends team-admin / global-admin access on the server (team access is kept).
+  async function endAdmin(force = false) {
+    if (!force && !auth.globalAdmin && !auth.adminTeams.length) return;
+    try {
+      const res  = await api('session', { method: 'POST', body: { action: 'end-admin' } });
+      const data = await readJson(res);
+      if (res.ok && data) applySession(data);
+    } catch (err) {
+      console.error('Ending admin access failed:', err);
+    }
+  }
+
+  async function dropTeam(team) {
+    try {
+      const res  = await api('session', { method: 'POST', body: { action: 'drop-team', team } });
+      const data = await readJson(res);
+      if (res.ok && data) applySession(data);
+    } catch (err) {
+      console.error('Dropping team access failed:', err);
+    }
+  }
+
+  async function signOut() {
+    let ok = false;
+    try {
+      const res = await api('session', { method: 'POST', body: { action: 'logout' } });
+      ok = res.ok;
+    } catch {}
+    applySession(null);
+    adminUnlocked = false;
+    invalidateAuth();
+    invalidateAdminAuth();
+    if (document.getElementById('team-page').style.display === 'block') {
+      document.getElementById('team-page').style.display = 'none';
+      document.getElementById('workspace-error')?.remove();
+      currentTeam = null;
+      showPage('teams');
+    } else {
+      loadGoals();
+    }
+    loadHandbook();
+    if (!ok) alert('Could not reach the server to sign out. Please try again, or close the browser to end the session.');
+  }
+
+  // Called when the server reports that the session is missing or expired.
+  function sessionExpired() {
+    applySession(null);
+    adminUnlocked = false;
+    renderAdminAreas();
+    showWorkspaceError('Your session has expired or you were signed out. Go back to Teams and unlock your workspace again.');
+  }
 
   // ── Team password modal ──────────────────────────────────────
   const teamModal    = document.getElementById('team-modal');
@@ -999,11 +1118,8 @@
     // Step 1: authentication (network / server errors only)
     let res, data = null;
     try {
-      res = await fetch('/.netlify/functions/check-password', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ team: teamId, password })
-      });
-      try { data = await res.json(); } catch { data = null; }
+      res  = await api('check-password', { method: 'POST', body: { team: teamId, password } });
+      data = await readJson(res);
     } catch (err) {
       if (isStale()) return;
       console.error('Team password check failed:', err);
@@ -1011,14 +1127,22 @@
       showError('Could not connect. Please try again.');
       return;
     }
-    if (isStale()) return;                         // cancelled / reopened / switched team
+    if (isStale()) {                               // cancelled / reopened / switched team
+      // The user abandoned this login: don't leave the server session unlocked for it.
+      if (res.ok && data && data.success === true && !unlockedTeams.includes(teamId)) dropTeam(teamId);
+      return;
+    }
     setAuthPending(false);
 
     if (res.status >= 500) {
-      console.error('Team password check server error:', res.status, data);
-      showError('The server had a problem checking your password. Please try again in a moment.');
+      console.error('Team password check server error:', res.status);
+      showError(data && data.error === 'maintenance'
+        ? 'Team workspaces are temporarily closed for maintenance. Please try again later.'
+        : 'The server had a problem checking your password. Please try again in a moment.');
       return;
     }
+
+    if (res.status === 429) { showError(tooManyMessage(data)); return; }
 
     const rejected = res.status === 401 || (res.ok && data && data.success === false);
     if (rejected) {
@@ -1029,17 +1153,18 @@
     }
 
     if (!res.ok || !data || data.success !== true) {
-      console.error('Unexpected password check response:', res.status, data);
+      console.error('Unexpected password check response:', res.status);
       showError('Could not verify your password (error ' + res.status + '). Please try again.');
       return;
     }
 
-    // Step 2: authenticated — open the workspace (UI errors reported separately)
+    // Step 2: authenticated — the server set the session cookie; open the workspace
+    applySession(data.session);
     if (!unlockedTeams.includes(teamId)) unlockedTeams.push(teamId);
-    sessionStorage.setItem('unlockedTeams', JSON.stringify(unlockedTeams));
     teamModal.classList.remove('open');
     formNote.textContent = '';
     loadGoals();
+    loadHandbook();
     const meta = TEAMS[teamId] || { emoji: '', name: teamId };
     renderTeamPage(teamId, meta.emoji, meta.name);
   }
@@ -1106,11 +1231,8 @@
 
     let res, data = null;
     try {
-      res = await fetch('/.netlify/functions/check-password', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ team: 'admin', teamName: teamId, password })
-      });
-      try { data = await res.json(); } catch { data = null; }
+      res  = await api('check-password', { method: 'POST', body: { team: 'admin', teamName: teamId, password } });
+      data = await readJson(res);
     } catch (err) {
       if (isStale()) return;
       console.error('Admin password check failed:', err);
@@ -1118,14 +1240,20 @@
       showError('Could not connect. Please try again.');
       return;
     }
-    if (isStale()) return;                         // cancelled / reopened / locked / switched team
+    if (isStale()) {                               // cancelled / reopened / locked / switched team
+      // The server may have granted admin access for a request the user abandoned: drop it.
+      if (res.ok && data && data.success === true) endAdmin(true);
+      return;
+    }
     setAdminAuthPending(false);
 
     if (res.status >= 500) {
-      console.error('Admin password check server error:', res.status, data);
+      console.error('Admin password check server error:', res.status);
       showError('The server had a problem checking the admin password. Please try again in a moment.');
       return;
     }
+
+    if (res.status === 429) { showError(tooManyMessage(data)); return; }
 
     const rejected = res.status === 401 || (res.ok && data && data.success === false);
     if (rejected) {
@@ -1136,14 +1264,13 @@
     }
 
     if (!res.ok || !data || data.success !== true) {
-      console.error('Unexpected admin password response:', res.status, data);
+      console.error('Unexpected admin password response:', res.status);
       showError('Could not verify the admin password (error ' + res.status + '). Please try again.');
       return;
     }
 
+    applySession(data.session);
     adminUnlocked = true;
-    sessionStorage.setItem('adminUnlocked', 'true');
-    sessionStorage.setItem('adminPassword', password);
     closeAdminModal();
     adminNote.textContent = '';
     renderAdminAreas();
@@ -1153,11 +1280,9 @@
   function lockAdmin() {
     invalidateAdminAuth();
     adminUnlocked = false;
-    sessionStorage.removeItem('adminUnlocked');
-    sessionStorage.removeItem('adminPassword');
     renderAdminAreas();
-    loadLinks('eos');
-    loadLinks('kpi');
+    endAdmin();
+    ['tasks', 'eos', 'kpi', 'handover', 'tools'].forEach(t => loadLinks(t));
   }
 
   function renderAdminAreas() {
@@ -1179,6 +1304,8 @@
   function renderTeamPage(teamId, emoji, name) {
     const tp = document.getElementById('team-page');
     currentTeam = teamId;
+    adminUnlocked = canManageCurrent();   // restores admin mode for a still-valid admin session
+    document.getElementById('workspace-error')?.remove();
     pages.forEach(p => p.classList.remove('active'));
     setActiveJourneyStep('teams');        // keep "My team" highlighted + aria-current
     tp.style.display = 'block';
@@ -1215,8 +1342,7 @@
     document.getElementById('workspace-error')?.remove();
     currentTeam   = null;
     adminUnlocked = false;
-    sessionStorage.removeItem('adminUnlocked');
-    sessionStorage.removeItem('adminPassword');
+    endAdmin();                           // admin mode ends when leaving the workspace
     showPage('teams');
   }
 
@@ -1239,12 +1365,21 @@
     if (!container) return;
     container.innerHTML = '<p class="links-loading">Loading…</p>';
     try {
-      const res  = await fetch(`/.netlify/functions/get-links?team=${encodeURIComponent(team)}&type=${type}`);
+      const res  = await api('get-links', { query: { team, type } });
+      if (team !== currentTeam) return;   // user switched teams while loading
+      if (res.status === 401) {
+        container.innerHTML = '<p class="links-error" role="alert">Your session has expired. Please unlock the workspace again.</p>';
+        sessionExpired();
+        return;
+      }
+      if (res.status === 403) {
+        container.innerHTML = '<p class="links-error" role="alert">You don\'t have access to this team\'s files.</p>';
+        return;
+      }
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
-      if (team !== currentTeam) return;   // user switched teams while loading
-      if (type === 'kpi') renderKpiYears(data.links || {});
-      else renderFlatList(type, data.links || []);
+      if (team !== currentTeam) return;
+      renderLinks(type, data.links, data.version);
     } catch (err) {
       console.error(`loadLinks(${type}) failed:`, err);
       if (team !== currentTeam) return;
@@ -1252,37 +1387,181 @@
     }
   }
 
+  function renderLinks(type, links, version) {
+    const key = currentTeam + ':' + type;
+    if (version !== undefined) linkVersions[key] = version || '';
+    if (type === 'kpi') {
+      const data = links && typeof links === 'object' && !Array.isArray(links) ? links : {};
+      linkCache[key] = data;
+      renderKpiYears(data);
+    } else {
+      const data = Array.isArray(links) ? links : [];
+      linkCache[key] = data;
+      renderFlatList(type, data);
+    }
+  }
+
+  function emptyNote(text) {
+    const div = document.createElement('div');
+    div.className = 'links-empty';
+    div.textContent = text;
+    return div;
+  }
+
   function renderFlatList(type, links) {
     const el    = document.getElementById(`${type}-links-list`);
     const label = { tasks: 'Task List', eos: 'EOS', handover: 'Handover', tools: 'Tools' }[type] || type;
-    if (!links.length) { el.innerHTML = `<div class="links-empty">No ${label} files added yet.</div>`; return; }
-    el.innerHTML = links.map(l => driveCard(l, type, null)).join('');
+    if (!links.length) { el.replaceChildren(emptyNote(`No ${label} files added yet.`)); return; }
+    el.replaceChildren(...links.map(l => driveCard(l, type, null)));
   }
 
   function renderKpiYears(linksByYear) {
     const allYears = new Set(['2026', '2027', ...Object.keys(linksByYear)]);
     const sorted   = [...allYears].sort();
     const el       = document.getElementById('kpi-years-container');
-    el.innerHTML   = sorted.map(year => {
-      const links = linksByYear[year] || [];
-      const cards = links.length
-        ? links.map(l => driveCard(l, 'kpi', year)).join('')
-        : `<div class="links-empty">No KPI files for ${year} yet.</div>`;
-      return `<div class="year-section"><div class="year-label-row">📅 ${year}</div>${cards}</div>`;
-    }).join('');
+    el.replaceChildren(...sorted.map(year => {
+      const section = document.createElement('div');
+      section.className = 'year-section';
+      const label = document.createElement('div');
+      label.className = 'year-label-row';
+      label.textContent = '📅 ' + year;
+      section.appendChild(label);
+      const links = Array.isArray(linksByYear[year]) ? linksByYear[year] : [];
+      if (links.length) links.forEach(l => section.appendChild(driveCard(l, 'kpi', year)));
+      else section.appendChild(emptyNote(`No KPI files for ${year} yet.`));
+      return section;
+    }));
+  }
+
+  // Only https links are opened. Anything else stored earlier is shown as text
+  // for an admin to review instead of being rendered as a clickable link.
+  function safeHref(url) {
+    try {
+      const u = new URL(String(url));
+      return u.protocol === 'https:' && !u.username && !u.password ? u.href : null;
+    } catch { return null; }
   }
 
   function driveCard(link, type, year) {
-    const yearArg = year ? `'${year}'` : 'null';
-    return `
-      <div class="drive-card" id="drive-card-${link.id}" data-name="${esc(link.name)}" data-url="${esc(link.url)}">
-        <span class="drive-icon">📄</span>
-        <a class="drive-link" href="${esc(link.url)}" target="_blank" rel="noopener noreferrer">${esc(link.name)}</a>
-        ${adminUnlocked ? `
-          <button class="drive-edit-btn" title="Edit" onclick="editLinkCard('${type}', ${link.id}, ${yearArg}, this)">✏</button>
-          <button class="drive-remove-btn" title="Remove" onclick="removeLink('${type}', ${link.id}, ${yearArg})">×</button>
-        ` : ''}
-      </div>`;
+    link = link && typeof link === 'object' ? link : {};
+    const card = document.createElement('div');
+    card.className = 'drive-card';
+    card.dataset.type = type;
+    card.dataset.id = String(link.id);
+    if (year) card.dataset.year = year;
+    const icon = document.createElement('span');
+    icon.className = 'drive-icon';
+    icon.textContent = '📄';
+    card.appendChild(icon);
+    const name = String(link.name ?? link.url ?? '');
+    const href = safeHref(link.url);
+    let anchor;
+    if (href) {
+      anchor = document.createElement('a');
+      anchor.href = href;
+      anchor.target = '_blank';
+      anchor.rel = 'noopener noreferrer';
+      anchor.referrerPolicy = 'no-referrer';
+      anchor.textContent = name;
+    } else {
+      anchor = document.createElement('span');
+      anchor.className = 'drive-link-invalid';
+      anchor.textContent = name + ' (link needs review)';
+    }
+    anchor.classList.add('drive-link');
+    card.appendChild(anchor);
+    if (adminUnlocked) {
+      const edit = document.createElement('button');
+      edit.className = 'drive-edit-btn'; edit.title = 'Edit'; edit.textContent = '✏';
+      edit.dataset.linkAction = 'edit';
+      const remove = document.createElement('button');
+      remove.className = 'drive-remove-btn'; remove.title = 'Remove'; remove.textContent = '×';
+      remove.dataset.linkAction = 'remove';
+      card.append(edit, remove);
+    }
+    return card;
+  }
+
+  function findCachedLink(type, id, year) {
+    const data = linkCache[currentTeam + ':' + type];
+    const list = type === 'kpi' ? (data && Array.isArray(data[year]) ? data[year] : []) : (data || []);
+    return list.find(l => l && l.id === id) || null;
+  }
+
+  document.addEventListener('click', event => {
+    const btn = event.target.closest('[data-link-action]');
+    if (!btn) return;
+    const card = btn.closest('.drive-card');
+    if (!card) return;
+    const type = card.dataset.type;
+    const id   = Number(card.dataset.id);
+    const year = card.dataset.year || null;
+    const action = btn.dataset.linkAction;
+    if (action === 'remove') removeLink(type, id, year);
+    else if (action === 'edit') editLinkCard(type, id, year);
+    else if (action === 'save') saveEditLink(type, id, year, btn);
+    else if (action === 'cancel') loadLinks(type);
+  });
+
+  const SAVE_ERRORS = {
+    url_required: 'Please paste a link.',
+    url_too_long: 'That link is too long.',
+    url_invalid: 'That doesn\'t look like a valid link.',
+    url_https_only: 'Links must start with https://',
+    url_credentials: 'Links must not contain a user name or password.',
+    url_port: 'Links must use the standard https port.',
+    url_host: 'Links must point to a public website.',
+    url_host_not_allowed: 'Links to that website are not allowed here.',
+    name_invalid: 'The file name is too long or contains unsupported characters.',
+    year_invalid: 'Please choose a year between 2000 and 2100.',
+    goal_year_invalid: 'Please enter a year name using letters, numbers, spaces, - . or /.',
+    goal_value_invalid: 'One of the goal values is too long or contains unsupported characters.',
+    goal_rows_invalid: 'Too many goal rows.',
+    list_full: 'This list is full. Remove old files first.',
+  };
+
+  // Shows the right message for a failed write; returns nothing.
+  function reportWriteError(res, data, what) {
+    const code = data && data.error;
+    if (res.status === 401) {
+      sessionExpired();
+      alert('Your session has expired. Please unlock the workspace again.');
+    } else if (res.status === 403) {
+      if (adminUnlocked) { adminUnlocked = false; renderAdminAreas(); }
+      alert('Your admin access has ended or does not cover this. Unlock admin mode again to make changes.');
+    } else if (res.status === 409 && code === 'conflict') {
+      alert(`Someone else changed these ${what} while you were working. The latest version has been loaded — please check it and try again.`);
+    } else if (res.status === 409 && code === 'duplicate') {
+      alert('That link is already in this list.');
+    } else if (res.status === 404) {
+      alert(`That item was already removed. The latest ${what} have been loaded.`);
+    } else if (res.status === 400 && SAVE_ERRORS[code]) {
+      alert(SAVE_ERRORS[code]);
+    } else if (res.status === 409) {
+      alert(`These ${what} could not be changed (${code || 'conflict'}). Please refresh and try again.`);
+    } else {
+      alert('Error saving. Please try again.');
+    }
+  }
+
+  // Sends one versioned change for the open team. Re-renders with the server's
+  // latest data on success and on conflict. Returns true on success.
+  async function mutateLinks(type, payload) {
+    const team = currentTeam;
+    const key  = team + ':' + type;
+    let res, data;
+    try {
+      res  = await api('manage-links', { method: 'POST', body: { ...payload, team, type, version: linkVersions[key] ?? '' } });
+      data = await readJson(res);
+    } catch (e) {
+      alert('Could not connect. Please try again.');
+      return false;
+    }
+    if (team !== currentTeam) return false;
+    if (data && data.links !== undefined) renderLinks(type, data.links, data.version);
+    if (res.ok && data && data.success) return true;
+    reportWriteError(res, data, 'files');
+    return false;
   }
 
   async function addLink(type) {
@@ -1298,55 +1577,34 @@
       year = yearSel === 'custom' ? yearCustom : yearSel;
       if (!year) { document.getElementById('kpi-new-year-custom').focus(); return; }
     }
-    const adminPassword = sessionStorage.getItem('adminPassword');
-    try {
-      const res  = await fetch('/.netlify/functions/manage-links', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'add', team: currentTeam, type, year, link: { name: name || url, url }, adminPassword })
-      });
-      const data = await res.json();
-      if (data.success) {
-        nameInput.value = ''; urlInput.value = '';
-        if (type === 'kpi') renderKpiYears(data.links);
-        else renderFlatList(type, data.links);
-      } else if (res.status === 401) {
-        alert('Incorrect admin password. Please lock and re-enter.');
-      } else {
-        alert('Error saving link. Check Netlify function logs.');
-      }
-    } catch (e) { alert('Could not connect: ' + e.message); }
+    const ok = await mutateLinks(type, { action: 'add', year, link: { name: name || url, url } });
+    if (ok) { nameInput.value = ''; urlInput.value = ''; }
   }
 
   async function removeLink(type, id, year) {
     if (!confirm('Remove this file link?')) return;
-    const adminPassword = sessionStorage.getItem('adminPassword');
-    try {
-      const res  = await fetch('/.netlify/functions/manage-links', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'remove', team: currentTeam, type, year, id, adminPassword })
-      });
-      const data = await res.json();
-      if (data.success) {
-        if (type === 'kpi') renderKpiYears(data.links);
-        else renderFlatList(type, data.links);
-      } else { alert('Error removing file. Please try again.'); }
-    } catch { alert('Could not remove file. Please try again.'); }
+    await mutateLinks(type, { action: 'remove', year, id });
   }
 
-  function editLinkCard(type, id, year, btn) {
-    const card = document.getElementById('drive-card-' + id);
-    if (!card) return;
-    const currentName = card.dataset.name || '';
-    const currentUrl  = card.dataset.url  || '';
-    const yearArg = year ? `'${year}'` : 'null';
-    card.innerHTML = `
-      <span class="drive-icon">📄</span>
-      <div class="edit-inline">
-        <input class="edit-name" placeholder="Display name" value="${esc(currentName)}" />
-        <input class="edit-url"  placeholder="URL" value="${esc(currentUrl)}" />
-        <button class="edit-save-btn"   onclick="saveEditLink('${type}', ${id}, ${yearArg}, this)">Save</button>
-        <button class="edit-cancel-btn" onclick="loadLinks('${type}')">Cancel</button>
-      </div>`;
+  function editLinkCard(type, id, year) {
+    const card = [...document.querySelectorAll('.drive-card')]
+      .find(c => c.dataset.type === type && Number(c.dataset.id) === id && (c.dataset.year || null) === year);
+    const link = findCachedLink(type, id, year);
+    if (!card || !link) return;
+    const icon = document.createElement('span');
+    icon.className = 'drive-icon'; icon.textContent = '📄';
+    const box = document.createElement('div');
+    box.className = 'edit-inline';
+    const nameIn = document.createElement('input');
+    nameIn.className = 'edit-name'; nameIn.placeholder = 'Display name'; nameIn.value = String(link.name ?? ''); nameIn.maxLength = 300;
+    const urlIn = document.createElement('input');
+    urlIn.className = 'edit-url'; urlIn.placeholder = 'URL'; urlIn.value = String(link.url ?? ''); urlIn.maxLength = 2048;
+    const save = document.createElement('button');
+    save.className = 'edit-save-btn'; save.textContent = 'Save'; save.dataset.linkAction = 'save';
+    const cancel = document.createElement('button');
+    cancel.className = 'edit-cancel-btn'; cancel.textContent = 'Cancel'; cancel.dataset.linkAction = 'cancel';
+    box.append(nameIn, urlIn, save, cancel);
+    card.replaceChildren(icon, box);
   }
 
   async function saveEditLink(type, id, year, btn) {
@@ -1354,50 +1612,72 @@
     const newName = card.querySelector('.edit-name').value.trim();
     const newUrl  = card.querySelector('.edit-url').value.trim();
     if (!newUrl) { card.querySelector('.edit-url').focus(); return; }
-    const adminPassword = sessionStorage.getItem('adminPassword');
     btn.textContent = '…'; btn.disabled = true;
+    // One atomic update keeps the record's id and position.
+    const ok = await mutateLinks(type, { action: 'update', year, id, link: { name: newName || newUrl, url: newUrl } });
+    if (!ok && btn.isConnected) { btn.textContent = 'Save'; btn.disabled = false; }
+  }
+
+  // ── Employee handbook (protected link) ───────────────────────
+  const HANDBOOK_LOCKED = '<p class="links-loading">🔒 Unlock your team section on the <a class="inline-link" href="#teams" data-page="teams">My team</a> page to open the employee handbook.</p>';
+
+  function handbookCard(link, single) {
+    const href = safeHref(link && link.url);
+    const card = document.createElement(href ? 'a' : 'div');
+    card.className = 'handbook-card';
+    if (href) { card.href = href; card.target = '_blank'; card.rel = 'noopener noreferrer'; card.referrerPolicy = 'no-referrer'; }
+    card.innerHTML = '<span class="feature-icon">📄</span><span><h3></h3><p>Opens in Google Docs · Use your company Google account</p></span><span class="arrow">↗</span>';
+    const name = String((link && link.name) || 'Employee Handbook');
+    card.querySelector('h3').textContent = href ? (single ? 'Open ' + name : name) : name + ' (link needs review)';
+    return card;
+  }
+
+  async function loadHandbook() {
+    const box = document.getElementById('handbook-links');
+    if (!box) return;
+    if (!auth.authenticated) { box.innerHTML = HANDBOOK_LOCKED; return; }
+    box.innerHTML = '<p class="links-loading">Loading…</p>';
     try {
-      const r1 = await fetch('/.netlify/functions/manage-links', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'remove', team: currentTeam, type, year, id, adminPassword })
-      });
-      const d1 = await r1.json();
-      if (!d1.success) { alert('Error saving. Please try again.'); loadLinks(type); return; }
-      const r2 = await fetch('/.netlify/functions/manage-links', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'add', team: currentTeam, type, year, link: { name: newName || newUrl, url: newUrl }, adminPassword })
-      });
-      const d2 = await r2.json();
-      if (d2.success) {
-        if (type === 'kpi') renderKpiYears(d2.links);
-        else renderFlatList(type, d2.links);
-      } else { alert('Error saving.'); loadLinks(type); }
-    } catch (e) { alert('Could not save: ' + e.message); loadLinks(type); }
+      const res = await api('get-links', { query: { team: 'global', type: 'handbook' } });
+      if (res.status === 401) { applySession(null); box.innerHTML = HANDBOOK_LOCKED; return; }
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data  = await res.json();
+      const links = Array.isArray(data.links) ? data.links : [];
+      if (!links.length) { box.innerHTML = '<p class="links-loading">The handbook link is not available yet. Please ask your manager.</p>'; return; }
+      box.replaceChildren(...links.map(l => handbookCard(l, links.length === 1)));
+    } catch (err) {
+      console.error('loadHandbook failed:', err);
+      box.innerHTML = '<p class="links-error" role="alert">Could not load the handbook link. Please refresh.</p>';
+    }
   }
 
   // ── Revenue Goals ────────────────────────────────────────────
   async function loadGoals() {
-    const freshUnlocked = JSON.parse(sessionStorage.getItem('unlockedTeams') || '[]');
-    const freshAdmin    = sessionStorage.getItem('adminUnlocked') === 'true';
-    const canView = freshUnlocked.length > 0 || freshAdmin;
+    const canView   = auth.authenticated;
     const lockedEl  = document.getElementById('goals-locked');
     const displayEl = document.getElementById('goals-display');
     const editBtn   = document.getElementById('goals-edit-btn');
+    const formEl    = document.getElementById('goals-edit-form');
     if (!canView) {
       if (lockedEl)  lockedEl.style.display  = 'block';
       if (displayEl) displayEl.style.display = 'none';
       if (editBtn)   editBtn.style.display   = 'none';
+      if (formEl)    formEl.style.display    = 'none';
       return;
     }
+    if (formEl && formEl.style.display === 'block') return;   // don't discard an open edit
     if (lockedEl)  lockedEl.style.display  = 'none';
     if (displayEl) displayEl.style.display = 'block';
     if (editBtn)   editBtn.style.display   = 'flex';
     const container = document.getElementById('goals-years-container');
     if (container) container.innerHTML = '<p class="links-loading">Loading…</p>';
     try {
-      const res  = await fetch('/.netlify/functions/get-links?team=global&type=goals');
+      const res  = await api('get-links', { query: { team: 'global', type: 'goals' } });
+      if (res.status === 401) { applySession(null); return loadGoals(); }
+      if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
-      allGoalsData = data.links || {};
+      allGoalsData = data.links && typeof data.links === 'object' && !Array.isArray(data.links) ? data.links : {};
+      goalsVersion = data.version || '';
       renderGoals(allGoalsData);
     } catch {
       allGoalsData = {};
@@ -1419,20 +1699,21 @@
     };
     const filtered = years.filter(hasData);
     if (!filtered.length) { container.innerHTML = '<p class="links-loading">No goals set yet.</p>'; return; }
+    const rows = v => (Array.isArray(v) ? v.filter(r => r && typeof r === 'object') : []);
     container.innerHTML = filtered.map(yr => {
       const g = goalsData[yr];
       const topRow = [
         g.yearGoal    ? `<div class="goal-box"><div class="goal-label">Year</div><p class="goal-value">${esc(g.yearGoal)}</p></div>` : '',
         g.quarterGoal ? `<div class="goal-box"><div class="goal-label">Quarter</div><p class="goal-value">${esc(g.quarterGoal)}</p></div>` : '',
       ].filter(Boolean).join('');
-      const months = g.monthlyGoals || [];
+      const months = rows(g.monthlyGoals);
       const monthHtml = months.length ? `<div class="goals-subsection"><div class="goals-sub-title">Monthly</div><div class="monthly-goals-grid">${months.map(m => `<div class="month-goal-chip"><div class="month-name">${esc(m.month)}</div><div class="month-val">${esc(m.goal)}</div></div>`).join('')}</div></div>` : '';
-      const brands = g.brandGoals || [];
+      const brands = rows(g.brandGoals);
       const brandHtml = brands.length ? `<div class="goals-subsection"><div class="goals-sub-title">By Brand</div>${brands.map(b => {
         const parts = [b.yearGoal ? `Year: <strong>${esc(b.yearGoal)}</strong>` : '', b.quarterGoal ? `Q: <strong>${esc(b.quarterGoal)}</strong>` : '', b.monthlyGoal ? `Mo: <strong>${esc(b.monthlyGoal)}</strong>` : ''].filter(Boolean).join(' · ');
         return `<div class="goal-row-item"><span class="goal-row-name">${esc(b.brand)}</span><span class="goal-row-vals">${parts}</span></div>`;
       }).join('')}</div>` : '';
-      const channels = g.channelGoals || [];
+      const channels = rows(g.channelGoals);
       const channelHtml = channels.length ? `<div class="goals-subsection"><div class="goals-sub-title">By Channel</div>${channels.map(c => {
         const parts = [c.yearGoal ? `Year: <strong>${esc(c.yearGoal)}</strong>` : '', c.quarterGoal ? `Q: <strong>${esc(c.quarterGoal)}</strong>` : '', c.monthlyGoal ? `Mo: <strong>${esc(c.monthlyGoal)}</strong>` : ''].filter(Boolean).join(' · ');
         return `<div class="goal-row-item"><span class="goal-row-name">${esc(c.channel)}</span><span class="goal-row-vals">${parts}</span></div>`;
@@ -1441,8 +1722,8 @@
         <div class="goals-year-header">
           <span class="goals-year-label">📅 ${esc(yr)}</span>
           <span class="goals-year-actions">
-            <button class="goals-action-btn" onclick="editGoals('${esc(yr)}')">Edit</button>
-            <button class="goals-action-btn goals-delete-btn" onclick="deleteGoalYear('${esc(yr)}')">Delete</button>
+            <button class="goals-action-btn" data-goal-action="edit" data-goal-year="${esc(yr)}">Edit</button>
+            <button class="goals-action-btn goals-delete-btn" data-goal-action="delete" data-goal-year="${esc(yr)}">Delete</button>
           </span>
         </div>
         <div class="goals-year-body">
@@ -1453,48 +1734,72 @@
     }).join('');
   }
 
-  function editGoals(yr) {
-    const pw = prompt('Enter the global admin password to edit revenue goals:');
-    if (!pw) return;
-    sessionStorage.setItem('goalsAdminPw', pw);
+  document.addEventListener('click', event => {
+    const btn = event.target.closest('[data-goal-action]');
+    if (!btn) return;
+    const yr = btn.dataset.goalYear;
+    if (btn.dataset.goalAction === 'edit') editGoals(yr);
+    else if (btn.dataset.goalAction === 'delete') deleteGoalYear(yr);
+  });
+
+  // Revenue goals can only be changed by the global admin. If the session has no
+  // global admin access yet, ask for the password and let the server verify it.
+  async function ensureGlobalAdmin(message) {
+    if (auth.globalAdmin) return true;
+    const pw = prompt(message);
+    if (!pw) return false;
+    let res, data;
+    try {
+      res  = await api('check-password', { method: 'POST', body: { team: 'admin', scope: 'global', password: pw } });
+      data = await readJson(res);
+    } catch {
+      alert('Could not connect. Please try again.');
+      return false;
+    }
+    if (res.ok && data && data.success === true) { applySession(data.session); return auth.globalAdmin; }
+    if (res.status === 429) alert(tooManyMessage(data));
+    else if (res.status === 401) alert('Incorrect admin password.');
+    else alert('Could not verify the admin password (error ' + res.status + '). Please try again.');
+    return false;
+  }
+
+  async function editGoals(yr) {
+    if (!(await ensureGlobalAdmin('Enter the global admin password to edit revenue goals:'))) return;
     currentEditYear = yr || null;
-    const g = yr && allGoalsData[yr] ? allGoalsData[yr] : {};
+    const g = yr && allGoalsData[yr] && typeof allGoalsData[yr] === 'object' ? allGoalsData[yr] : {};
+    const rows = v => (Array.isArray(v) ? v.filter(r => r && typeof r === 'object') : []);
     document.getElementById('goal-year-label').value    = yr || '';
     document.getElementById('goal-year-input').value    = g.yearGoal    || '';
     document.getElementById('goal-quarter-input').value = g.quarterGoal || '';
     document.getElementById('month-edit-rows').innerHTML   = '';
-    (g.monthlyGoals||[]).forEach(m => addMonthRow(m.month, m.goal));
+    rows(g.monthlyGoals).forEach(m => addMonthRow(m.month, m.goal));
     document.getElementById('brand-edit-rows').innerHTML   = '';
-    (g.brandGoals||[]).forEach(b => addBrandRow(b.brand, b.yearGoal, b.quarterGoal, b.monthlyGoal));
+    rows(g.brandGoals).forEach(b => addBrandRow(b.brand, b.yearGoal, b.quarterGoal, b.monthlyGoal));
     document.getElementById('channel-edit-rows').innerHTML = '';
-    (g.channelGoals||[]).forEach(c => addChannelRow(c.channel, c.yearGoal, c.quarterGoal, c.monthlyGoal));
+    rows(g.channelGoals).forEach(c => addChannelRow(c.channel, c.yearGoal, c.quarterGoal, c.monthlyGoal));
     document.getElementById('goals-display').style.display   = 'none';
     document.getElementById('goals-edit-form').style.display = 'block';
     document.getElementById('goals-edit-btn').style.display  = 'none';
   }
 
   async function deleteGoalYear(yr) {
-    const pw = prompt('Enter the global admin password to delete goals for ' + yr + ':');
-    if (!pw) return;
-    if (!confirm('Delete all goals for ' + yr + '? This cannot be undone.')) return;
+    if (!(await ensureGlobalAdmin('Enter the global admin password to delete goals for ' + yr + ':'))) return;
+    if (!confirm('Delete all goals for ' + yr + '? This cannot be undone.')) { endAdmin(); return; }
     try {
-      const res  = await fetch('/.netlify/functions/manage-links', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'delete-year', team: 'global', type: 'goals', goalYear: yr, adminPassword: pw })
-      });
-      const data = await res.json();
-      if (data.success) { allGoalsData = data.goals; renderGoals(allGoalsData); }
-      else if (res.status === 401) { alert('Incorrect admin password.'); }
-      else { alert('Error deleting goals.'); }
-    } catch(e) { alert('Could not delete: ' + e.message); }
+      const res  = await api('manage-links', { method: 'POST', body: { action: 'delete-year', team: 'global', type: 'goals', goalYear: yr, version: goalsVersion } });
+      const data = await readJson(res);
+      if (data && data.goals !== undefined) { allGoalsData = data.goals || {}; goalsVersion = data.version || ''; renderGoals(allGoalsData); }
+      if (!(res.ok && data && data.success)) reportWriteError(res, data, 'goals');
+    } catch (e) { alert('Could not delete. Please try again.'); }
+    endAdmin();
   }
 
   function addMonthRow(month='', goal='') {
     const row = document.createElement('div');
     row.className = 'goals-form-row';
     row.innerHTML = `
-      <input type="text" placeholder="e.g. January 2026" value="${esc(month)}" class="goals-input month-name-inp" />
-      <input type="text" placeholder="e.g. $100,000" value="${esc(goal)}" class="goals-input month-goal-inp" />
+      <input type="text" placeholder="e.g. January 2026" value="${esc(month)}" class="goals-input month-name-inp" maxlength="100" />
+      <input type="text" placeholder="e.g. $100,000" value="${esc(goal)}" class="goals-input month-goal-inp" maxlength="100" />
       <button class="goals-remove-row" onclick="this.closest('.goals-form-row').remove()" title="Remove">×</button>`;
     document.getElementById('month-edit-rows').appendChild(row);
   }
@@ -1503,10 +1808,10 @@
     const row = document.createElement('div');
     row.className = 'goals-form-row';
     row.innerHTML = `
-      <input type="text" placeholder="Brand name" value="${esc(brand)}" class="goals-input brand-name-inp" style="flex:1.3" />
-      <input type="text" placeholder="Year goal"    value="${esc(yearGoal)}"    class="goals-input brand-year" />
-      <input type="text" placeholder="Quarter goal" value="${esc(quarterGoal)}" class="goals-input brand-quarter" />
-      <input type="text" placeholder="Month goal"   value="${esc(monthlyGoal)}" class="goals-input brand-month" />
+      <input type="text" placeholder="Brand name" value="${esc(brand)}" class="goals-input brand-name-inp" style="flex:1.3" maxlength="100" />
+      <input type="text" placeholder="Year goal"    value="${esc(yearGoal)}"    class="goals-input brand-year" maxlength="100" />
+      <input type="text" placeholder="Quarter goal" value="${esc(quarterGoal)}" class="goals-input brand-quarter" maxlength="100" />
+      <input type="text" placeholder="Month goal"   value="${esc(monthlyGoal)}" class="goals-input brand-month" maxlength="100" />
       <button class="goals-remove-row" onclick="this.closest('.goals-form-row').remove()" title="Remove">×</button>`;
     document.getElementById('brand-edit-rows').appendChild(row);
   }
@@ -1515,19 +1820,19 @@
     const row = document.createElement('div');
     row.className = 'goals-form-row';
     row.innerHTML = `
-      <input type="text" placeholder="Channel name" value="${esc(channel)}" class="goals-input brand-name-inp" style="flex:1.3" />
-      <input type="text" placeholder="Year goal"    value="${esc(yearGoal)}"    class="goals-input brand-year" />
-      <input type="text" placeholder="Quarter goal" value="${esc(quarterGoal)}" class="goals-input brand-quarter" />
-      <input type="text" placeholder="Month goal"   value="${esc(monthlyGoal)}" class="goals-input brand-month" />
+      <input type="text" placeholder="Channel name" value="${esc(channel)}" class="goals-input brand-name-inp" style="flex:1.3" maxlength="100" />
+      <input type="text" placeholder="Year goal"    value="${esc(yearGoal)}"    class="goals-input brand-year" maxlength="100" />
+      <input type="text" placeholder="Quarter goal" value="${esc(quarterGoal)}" class="goals-input brand-quarter" maxlength="100" />
+      <input type="text" placeholder="Month goal"   value="${esc(monthlyGoal)}" class="goals-input brand-month" maxlength="100" />
       <button class="goals-remove-row" onclick="this.closest('.goals-form-row').remove()" title="Remove">×</button>`;
     document.getElementById('channel-edit-rows').appendChild(row);
   }
 
   function cancelGoals() {
-    sessionStorage.removeItem('goalsAdminPw');
     document.getElementById('goals-display').style.display   = 'block';
     document.getElementById('goals-edit-form').style.display = 'none';
     document.getElementById('goals-edit-btn').style.display  = 'flex';
+    endAdmin();                           // global admin access is only kept while editing
   }
 
   async function saveGoals() {
@@ -1543,26 +1848,22 @@
     const channelGoals = Array.from(document.querySelectorAll('#channel-edit-rows .goals-form-row'))
       .map(row => ({ channel: row.querySelector('.brand-name-inp').value.trim(), yearGoal: row.querySelector('.brand-year').value.trim(), quarterGoal: row.querySelector('.brand-quarter').value.trim(), monthlyGoal: row.querySelector('.brand-month').value.trim() }))
       .filter(c => c.channel);
-    const adminPassword = sessionStorage.getItem('goalsAdminPw') || sessionStorage.getItem('adminPassword');
+    if (!goalYear) { alert('Please enter a year name.'); document.getElementById('goal-year-label').focus(); return; }
     const saveBtn = document.querySelector('#goals-edit-form .goals-save-btn');
     saveBtn.textContent = '…'; saveBtn.disabled = true;
     try {
-      const res  = await fetch('/.netlify/functions/manage-links', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'set', team: 'global', type: 'goals', goalYear, yearGoal, quarterGoal, monthlyGoals, brandGoals, channelGoals, adminPassword })
-      });
-      const data = await res.json();
-      if (data.success) {
-        allGoalsData = data.goals;
-        renderGoals(allGoalsData);
-        sessionStorage.removeItem('goalsAdminPw');
+      const res  = await api('manage-links', { method: 'POST', body: { action: 'set', team: 'global', type: 'goals', goalYear, yearGoal, quarterGoal, monthlyGoals, brandGoals, channelGoals, version: goalsVersion } });
+      const data = await readJson(res);
+      if (data && data.goals !== undefined) { allGoalsData = data.goals || {}; goalsVersion = data.version || ''; renderGoals(allGoalsData); }
+      if (res.ok && data && data.success) {
         cancelGoals();
-      } else if (res.status === 401) {
-        alert('Incorrect admin password. Please try again.');
+      } else if (res.status === 409 && data && data.error === 'conflict') {
+        alert('Someone else changed the revenue goals while you were editing. The latest goals have been loaded; your edits are still in the form — review them and Save again, or Cancel.');
       } else {
-        alert('Error saving goals (status ' + res.status + '). Check Netlify function logs.');
+        reportWriteError(res, data, 'goals');
+        if (res.status === 401 || res.status === 403) cancelGoals();
       }
-    } catch (e) { alert('Could not save: ' + e.message); }
+    } catch (e) { alert('Could not save. Please try again.'); }
     finally { saveBtn.textContent = 'Save'; saveBtn.disabled = false; }
   }
 
@@ -1573,9 +1874,13 @@
   }
 
   // ── Utility ──────────────────────────────────────────────────
-  function esc(str) { return String(str).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  // Escapes text for HTML text and double/single-quoted attribute contexts.
+  function esc(str) {
+    return String(str ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
 
   // ── Init ─────────────────────────────────────────────────────
+  applySession(null);
   showPage(location.hash.slice(1) || 'home');
 </script>
 </body>

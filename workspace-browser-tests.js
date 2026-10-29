@@ -2,7 +2,9 @@ const { chromium } = require('playwright');
 const fs = require('fs');
 const HTML = process.argv[2];
 const html = fs.readFileSync(HTML, 'utf8');
-const png = fs.readFileSync('/tmp/sb-onboarding/succulents-box-logo-icon.png');
+const png = fs.readFileSync(require('path').join(__dirname, 'succulents-box-logo-icon.png'));
+// UI regression checks with mocked function responses (session protocol mocked).
+// Real server behaviour is covered by tests/*.test.js and tests/browser/e2e.js.
 const TEAMS = { marketing:'Marketing', customerservice:'Customer Service', seo:'SEO', design:'Design', video:'Video' };
 const PW = 'pw-ok';
 let results = []; const ok=(name,cond,extra='')=>results.push(`${cond?'PASS':'FAIL'}  ${name}${extra?'  — '+extra:''}`);
@@ -11,10 +13,23 @@ async function setup(browser, opts={}) {
   const ctx = await browser.newContext(opts.mobile ? { viewport:{width:390,height:844}, isMobile:true, hasTouch:true } : { viewport:{width:1280,height:900} });
   const page = await ctx.newPage();
   const errors = []; page.on('pageerror', e => errors.push(e.message));
+  // Minimal stand-in for the server session so mocked logins accumulate like the real one.
+  const srv = { teams: new Set(), admin: new Set() };
+  const summary = () => srv.teams.size ? { authenticated:true, teams:[...srv.teams], adminTeams:[...srv.admin], globalAdmin:false } : { authenticated:false };
   await page.route('**/*', async route => {
     const u = new URL(route.request().url());
     if (u.pathname === '/' || u.pathname === '/index.html') return route.fulfill({ body: html, contentType:'text/html' });
     if (u.pathname.endsWith('.png')) return route.fulfill({ body: png, contentType:'image/png' });
+    if (u.pathname === '/.netlify/functions/session') {
+      if (route.request().method() === 'POST') {
+        const pb = JSON.parse(route.request().postData() || '{}'); const a = pb.action;
+        if (a === 'logout') { srv.teams.clear(); srv.admin.clear(); }
+        if (a === 'drop-team') { srv.teams.delete(pb.team); srv.admin.delete(pb.team); }
+        if (a === 'end-admin') srv.admin.clear();
+        return route.fulfill({ json: { success:true, ...summary() } }).catch(()=>{});
+      }
+      return route.fulfill({ json: summary() }).catch(()=>{});
+    }
     if (u.pathname === '/.netlify/functions/check-password') {
       const b = JSON.parse(route.request().postData());
       if (b.team === 'admin') {
@@ -23,7 +38,9 @@ async function setup(browser, opts={}) {
         if (a.abort) return route.abort().catch(()=>{});
         if (a.raw) return route.fulfill(a.raw).catch(()=>{});
         if (a.status && a.status !== 200) return route.fulfill({ status:a.status, json:a.body||{success:false} }).catch(()=>{});
-        return route.fulfill({ json:{ success: b.password === 'admin-ok' } }).catch(()=>{});
+        const okA = b.password === 'admin-ok';
+        if (okA) srv.admin.add(b.teamName);
+        return route.fulfill({ status: okA ? 200 : 401, json: okA ? { success:true, session: summary() } : { success:false } }).catch(()=>{});
       }
       const ctl = opts.ctl || {};
       ctl.count = (ctl.count||0)+1;
@@ -32,7 +49,9 @@ async function setup(browser, opts={}) {
       if (delay) await new Promise(r=>setTimeout(r,delay));
       if (ctl.raw) return route.fulfill(ctl.raw).catch(()=>{});
       if (ctl.status && ctl.status !== 200) return route.fulfill({ status: ctl.status, json: ctl.body || { success:false } }).catch(()=>{});
-      return route.fulfill({ json: { success: b.password === PW } }).catch(()=>{});
+      const okT = b.password === PW;
+      if (okT) srv.teams.add(b.team);
+      return route.fulfill({ status: okT ? 200 : 401, json: okT ? { success:true, session: summary() } : { success:false } }).catch(()=>{});
     }
     if (u.pathname === '/.netlify/functions/get-links') {
       const type = u.searchParams.get('type'), team = u.searchParams.get('team');
@@ -99,7 +118,7 @@ async function journeyState(page){ return page.evaluate(()=>{const a=[...documen
     ok('Auth network failure → "Could not connect"', (await page.textContent('#form-note')).includes('Could not connect') && !(await visible(page,'#team-page')));
     await ctx.close(); }
   // ── Stale / duplicate auth responses ──
-  const unlocked = page => page.evaluate(()=>sessionStorage.getItem('unlockedTeams')||'[]');
+  const unlocked = page => page.evaluate(()=>JSON.stringify(unlockedTeams));
   const start = async (page, name, pw) => { await page.click(`.team-card:has(h3:text-is("${name}"))`); await page.fill('#team-password', pw); await page.click('#unlock-btn'); await page.waitForTimeout(100); };
   for (const how of ['Cancel','Escape','Backdrop']) {
     const ctl = { delay: 800 }; const { ctx, page, errors } = await setup(browser, { ctl });
@@ -161,7 +180,7 @@ async function journeyState(page){ return page.evaluate(()=>{const a=[...documen
     ok('401 → Incorrect password (unchanged behaviour)', note.includes('Incorrect') && (await page.inputValue('#team-password'))==='', note); await ctx.close(); }
 
   // ── Admin password ──
-  const adminState = page => page.evaluate(()=>({ s: sessionStorage.getItem('adminUnlocked'), badge: !!document.querySelector('#tasks-admin-area .admin-badge'), form: getComputedStyle(document.getElementById('tasks-add-form')).display }));
+  const adminState = page => page.evaluate(()=>({ s: adminUnlocked ? 'true' : null, badge: !!document.querySelector('#tasks-admin-area .admin-badge'), form: getComputedStyle(document.getElementById('tasks-add-form')).display }));
   const adminOff = st => st.s===null && !st.badge && st.form==='none';
   const adminStart = async (page, pw) => { await page.click('#tasks-admin-area .admin-unlock-btn'); await page.fill('#admin-input', pw); await page.click('#admin-unlock-btn'); await page.waitForTimeout(100); };
   const openWs = async (page, name) => { await login(page, null, name, PW); };
@@ -190,7 +209,7 @@ async function journeyState(page){ return page.evaluate(()=>{const a=[...documen
   { const adminCtl = { delay: 800 }; const { ctx, page } = await setup(browser, { adminCtl });
     await openWs(page,'Video'); await adminStart(page,'admin-ok'); await page.keyboard.press('Escape');
     await page.click('.team-back'); await page.waitForTimeout(1000);
-    ok('Admin: leaving workspace ignores old response', (await page.evaluate(()=>sessionStorage.getItem('adminUnlocked')))===null && await visible(page,'#teams'));
+    ok('Admin: leaving workspace ignores old response', (await page.evaluate(()=>adminUnlocked))===false && await visible(page,'#teams'));
     await ctx.close(); }
   { const adminCtl = { delay: 800 }; const { ctx, page } = await setup(browser, { adminCtl });
     await openWs(page,'Marketing'); await page.click('.team-back'); await openWs(page,'Customer Service');  // both unlocked
@@ -238,15 +257,17 @@ async function journeyState(page){ return page.evaluate(()=>{const a=[...documen
     await login(page,'customerservice','Customer Service',PW);
     const m = await page.evaluate(()=>({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth }));
     ok('Mobile 390px: workspace visible, no horizontal scroll', await visible(page,'#team-page') && m.sw<=m.cw, JSON.stringify(m));
-    await page.screenshot({ path: process.argv[3]+'-mobile.png', fullPage:false });
+    if (process.argv[3]) await page.screenshot({ path: process.argv[3]+'-mobile.png', fullPage:false });
     await page.click(`.tab-nav button[onclick*="'tools'"]`); await page.waitForTimeout(150);
     ok('Mobile: tab switch works', (await page.textContent('#tools-links-list')).includes('tools doc'));
     ok('Mobile: no JS errors', errors.length===0, errors.join('|'));
     await ctx.close(); }
   { const { ctx, page } = await setup(browser);
     await login(page,'marketing','Marketing',PW);
-    await page.screenshot({ path: process.argv[3]+'-desktop.png' }); await ctx.close(); }
+    if (process.argv[3]) await page.screenshot({ path: process.argv[3]+'-desktop.png' }); await ctx.close(); }
   await browser.close();
   console.log(results.join('\n'));
-  console.log(`\n${results.filter(r=>r.startsWith('PASS')).length}/${results.length} passed`);
+  const passed = results.filter(r=>r.startsWith('PASS')).length;
+  console.log(`\n${passed}/${results.length} passed`);
+  process.exitCode = passed === results.length ? 0 : 1;
 })();
