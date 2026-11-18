@@ -1,0 +1,11 @@
+{
+  "version": "synthetic-1",
+  "checklist": [
+    { "title": "Join the team chat", "text": "Ask **Example Manager** to invite you." },
+    { "title": "Learn the daily routine", "text": "Visit [[page:daily|Daily Tasks]] to see the routine." }
+  ],
+  "tools": [{ "icon": "💬", "name": "Example Chat", "note": "Ask Example Manager for an invite" }],
+  "benefitsNote": "**Example note:** invented text for tests.",
+  "benefits": [{ "icon": "🏖", "title": "Example leave", "text": "Invented benefit text <b>not HTML</b>." }],
+  "routine": [{ "title": "Example check-in", "paragraphs": ["Tap **Start** in Example Clock."], "detail": ["Ask **Example Manager** for an account."] }]
+}

@@ -1,0 +1,19 @@
+{
+  "entries": [
+    {
+      "team": "global",
+      "type": "handbook",
+      "links": [
+        { "name": "Employee Handbook", "url": "https://docs.google.com/document/d/EXAMPLE-HANDBOOK-ID/edit" }
+      ]
+    },
+    {
+      "team": "marketing",
+      "type": "kpi",
+      "year": "2026",
+      "links": [
+        { "name": "Fictional KPI sheet", "url": "https://docs.google.com/spreadsheets/d/EXAMPLE-KPI-ID/edit" }
+      ]
+    }
+  ]
+}

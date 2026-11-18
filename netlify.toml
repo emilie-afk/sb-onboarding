@@ -1,0 +1,26 @@
+[build]
+  # Only index.html and the logo are published (copied into dist/ by the build).
+  # The build fails if a real internal document link is committed (check:public).
+  publish   = "dist"
+  functions = "netlify/functions"
+  command   = "npm install && npm run check:public && npm run build && node scripts/write-private-guide.mjs && cd netlify/functions && npm install"
+
+[functions]
+  node_bundler = "esbuild"
+  external_node_modules = ["@netlify/blobs"]
+
+# The private guide is written by the build (scripts/write-private-guide.mjs) and
+# bundled with get-guide only. It is never in dist/.
+[functions.get-guide]
+  included_files = ["netlify/private/guide.json"]
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "same-origin"
+    X-Robots-Tag = "noindex, nofollow"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=()"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+
